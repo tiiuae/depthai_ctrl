@@ -16,11 +16,6 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 )
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEPTHAI_INC}")
-set(CMAKE_CXX_LDFLAGS "${CMAKE_CXX_LDFLAGS} ${DEPTHAI_LIB}")
-message("DEPTHAI_INC: ${DEPTHAI_INC}")
-message("DEPTHAI_LIB: ${DEPTHAI_LIB}")
-
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
