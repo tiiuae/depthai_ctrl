@@ -28,17 +28,20 @@ class DepthAICam
         DepthAICam() : device(nullptr)
         {
             auto colorCam = mPipeline.create<dai::node::ColorCamera>();
-            auto xlinkOut = mPipeline.create<dai::node::XLinkOut>();
+            auto colorCamVideoEnc = mPipeline.create<dai::node::VideoEncoder>();
+            auto colorCamXLinkOut = mPipeline.create<dai::node::XLinkOut>();
+            auto monoCam1 = mPipeline.create<dai::node::MonoCamera>();
             auto videoEnc = mPipeline.create<dai::node::VideoEncoder>();
             auto videoEncXLinkOut = mPipeline.create<dai::node::XLinkOut>();
-            auto monoCam1 = mPipeline.create<dai::node::MonoCamera>();
 
-            xlinkOut->setStreamName("preview");
-            colorCam->setPreviewSize(1280, 720);
-            colorCam->setColorOrder(dai::ColorCameraProperties::ColorOrder::BGR);
+            colorCamXLinkOut->setStreamName("enc264Color");
+            colorCam->setBoardSocket(dai::CameraBoardSocket::RGB);
+            colorCam->setVideoSize(1280, 720);
             colorCam->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
-            colorCam->setInterleaved(true);
-            colorCam->preview.link(xlinkOut->input);
+
+            colorCamVideoEnc->setDefaultProfilePreset(1280, 720, 25, dai::VideoEncoderProperties::Profile::H264_MAIN);
+            colorCam->video.link(colorCamVideoEnc->input);
+            colorCamVideoEnc->bitstream.link(colorCamXLinkOut->input);
 
             videoEncXLinkOut->setStreamName("enc264Left");
             monoCam1->setBoardSocket(dai::CameraBoardSocket::LEFT);
@@ -49,7 +52,7 @@ class DepthAICam
 
             try {
                 device = new dai::Device(mPipeline, false);
-                previewOutput = device->getOutputQueue("preview");
+                encColorOutput = device->getOutputQueue("enc264Color", 30, true);
                 encLeftOutput = device->getOutputQueue("enc264Left", 30, true);
             } catch (const std::runtime_error& err) {
                 std::cout << "DepthAI runtime error: " << err.what() << std::endl;
@@ -72,7 +75,7 @@ class DepthAICam
 
         std::shared_ptr<dai::ImgFrame> GetFrame(void)
         {
-            return previewOutput->get<dai::ImgFrame>();
+            return encColorOutput->get<dai::ImgFrame>();
         }
 
         bool IsDeviceAvailable(void)
@@ -81,10 +84,10 @@ class DepthAICam
         }
 
         std::shared_ptr<dai::DataOutputQueue> encLeftOutput;
+        std::shared_ptr<dai::DataOutputQueue> encColorOutput;
 
     private:
         dai::Device *device;
-        std::shared_ptr<dai::DataOutputQueue> previewOutput;
         dai::Pipeline mPipeline;
         dai::CameraControl mCameraCtrl;
         bool mIsDeviceAvailable = true;
@@ -95,10 +98,10 @@ class DepthAIGst
 {
     public:
         DepthAIGst(int argc, char *argv[]) : depthAICam(nullptr), mLoop(nullptr), mPipeline(nullptr), mAppsrc(nullptr),
-                                            mVideoconvert(nullptr), mH264enc(nullptr), mH264pay(nullptr),
-                                            mUdpSink(nullptr), mBusWatchId(0), mBus(nullptr), mEncQueue(nullptr), mNeedDataSignalId(0),
+                                            mH264parse(nullptr), mH264pay(nullptr),
+                                            mUdpSink(nullptr), mBusWatchId(0), mBus(nullptr), mNeedDataSignalId(0),
                                             mPipeline2(nullptr), mAppsrc2(nullptr), mH264parse2(nullptr), mH264pay2(nullptr),
-                                            mUdpSink2(nullptr), mBusWatchId2(0), mBus2(nullptr), mEncQueue2(nullptr), mNeedDataSignalId2(0),
+                                            mUdpSink2(nullptr), mBusWatchId2(0), mBus2(nullptr), mNeedDataSignalId2(0),
                                             mEnoughDataSignalId2(0), mLoopThread(nullptr)
         {
             gst_init(&argc, &argv);
@@ -144,22 +147,17 @@ class DepthAIGst
             g_object_set(G_OBJECT(mAppsrc), "block", true, NULL);
             g_object_set(G_OBJECT(mAppsrc), "stream-type", 0, NULL);
             gst_util_set_object_arg(G_OBJECT(mAppsrc), "format", "GST_FORMAT_TIME");
-            mVideoconvert = gst_element_factory_make("videoconvert", "video_convert");
-            mEncQueue = gst_element_factory_make("queue", "encoder_queue");
-            mH264enc = gst_element_factory_make("x264enc", "encoder");
-            gst_util_set_object_arg(G_OBJECT(mH264enc), "tune", "zerolatency");
-            gst_util_set_object_arg(G_OBJECT(mH264enc), "speed-preset", "ultrafast");
+            mH264parse = gst_element_factory_make("h264parse", "parser");
             mH264pay = gst_element_factory_make("rtph264pay", "payload");
             g_object_set(G_OBJECT(mH264pay), "pt", 96, NULL);
             mUdpSink = gst_element_factory_make("udpsink", "udp_sink");
             g_object_set(G_OBJECT(mUdpSink), "host", "127.0.0.1", NULL);
             g_object_set(G_OBJECT(mUdpSink), "port", 5600, NULL);
             g_object_set(G_OBJECT(mAppsrc), "caps",
-                gst_caps_new_simple("video/x-raw",
-                    "format", G_TYPE_STRING, "BGR",
+                gst_caps_new_simple("video/x-h264",
                     "width", G_TYPE_INT, 1280,
                     "height", G_TYPE_INT, 720,
-                    "framerate", GST_TYPE_FRACTION, 30, 1,
+                    "framerate", GST_TYPE_FRACTION, 25, 1,
                     NULL), NULL);
 
             mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
@@ -167,8 +165,8 @@ class DepthAIGst
             gst_object_unref(mBus);
             mBus = nullptr;
             
-            gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mVideoconvert, mEncQueue, mH264enc, mH264pay, mUdpSink, NULL);
-            gst_element_link_many (mAppsrc, mVideoconvert, mEncQueue, mH264enc, mH264pay, mUdpSink, NULL);
+            gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH264parse, mH264pay, mUdpSink, NULL);
+            gst_element_link_many (mAppsrc, mH264parse, mH264pay, mUdpSink, NULL);
 
             /* Second pipeline for encoded h264 video of the left camera. */
             mPipeline2 = gst_pipeline_new("camUDPSink_pipeline2");
@@ -179,7 +177,6 @@ class DepthAIGst
             g_object_set(G_OBJECT(mAppsrc2), "stream-type", 0, NULL);
             gst_util_set_object_arg(G_OBJECT(mAppsrc2), "format", "GST_FORMAT_TIME");
             mH264parse2 = gst_element_factory_make("h264parse", "parser2");
-            mEncQueue2 = gst_element_factory_make("queue", "encoder_queue2");
             mH264pay2 = gst_element_factory_make("rtph264pay", "payload2");
             g_object_set(G_OBJECT(mH264pay2), "pt", 96, NULL);
             mUdpSink2 = gst_element_factory_make("udpsink", "udp_sink2");
@@ -319,17 +316,9 @@ class DepthAIGst
             GstFlowReturn ret;
             GstBuffer *buffer;
             DepthAIGst *depthAIGst = (DepthAIGst *)user_data;
-            std::shared_ptr<dai::ImgFrame> frame;
+            DepthAICam *depthAICam = depthAIGst->depthAICam;
             
-            try {
-                frame = depthAIGst->depthAICam->GetFrame();
-            } catch (const std::runtime_error& err) {
-                std::cout << "DepthAICam::GetFrame runtime error: " << err.what() << std::endl;
-            }
-
-            if (frame == nullptr) {
-                return;
-            }
+            auto frame = depthAICam->encColorOutput->get<dai::ImgFrame>();
 
             guint size = frame->getData().size();
             buffer = gst_buffer_new_allocate(NULL, size, NULL);
@@ -406,11 +395,11 @@ class DepthAIGst
             DepthAIGst *depthAIGst = (DepthAIGst *)user_data;
             DepthAICam *depthAICam = depthAIGst->depthAICam;
             
-            auto packet = depthAICam->encLeftOutput->get<dai::Buffer>();
+            auto frame = depthAICam->encLeftOutput->get<dai::ImgFrame>();
 
-            guint size = packet->getData().size();
+            guint size = frame->getData().size();
             buffer = gst_buffer_new_allocate(NULL, size, NULL);
-            gst_buffer_fill(buffer, 0, (gconstpointer)(packet->getData().data()), size);
+            gst_buffer_fill(buffer, 0, (gconstpointer)(frame->getData().data()), size);
 
             g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);
             gst_buffer_unref(buffer);
@@ -432,13 +421,11 @@ class DepthAIGst
         GMainLoop *mLoop;
         GstElement *mPipeline;
         GstElement *mAppsrc;
-        GstElement *mVideoconvert;
-        GstElement *mH264enc;
+        GstElement *mH264parse;
         GstElement *mH264pay;
         GstElement *mUdpSink;
         guint mBusWatchId;
         GstBus *mBus;
-        GstElement *mEncQueue;
         guint mNeedDataSignalId;
         GstElement *mPipeline2;
         GstElement *mAppsrc2;
@@ -447,7 +434,6 @@ class DepthAIGst
         GstElement *mUdpSink2;
         guint mBusWatchId2;
         GstBus *mBus2;
-        GstElement *mEncQueue2;
         guint mNeedDataSignalId2;
         guint mEnoughDataSignalId2;
         GThread *mLoopThread;
