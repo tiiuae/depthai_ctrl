@@ -3,6 +3,9 @@
 #include <iostream>
 #include <chrono>
 #include <stdlib.h>
+#include <algorithm>
+#include <string>
+#include <cctype>
 
 #include <depthai/depthai.hpp>
 
@@ -12,29 +15,12 @@
 #include <gst/gstelement.h>
 #include <gst/gstcaps.h>
 
+#include <nlohmann/json.hpp>
+
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 using std::placeholders::_1;
 
-
-class DepthAICtrlSub : public rclcpp::Node
-{
-    public:
-        DepthAICtrlSub()
-        : Node("depthai_ctrl_sub")
-        {
-            subscription_ = this->create_subscription<std_msgs::msg::String>(
-                "depthai_cam_cmd", 10, std::bind(&DepthAICtrlSub::depthai_rgb_cam_cmd_cb,
-                this, _1));
-        }
-
-    private:
-        void depthai_rgb_cam_cmd_cb(const std_msgs::msg::String::SharedPtr msg) const
-        {
-            RCLCPP_INFO(this->get_logger(), "I heard: '%s'", msg->data.c_str());
-        }
-        rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_;
-};
 
 class DepthAICam
 {
@@ -452,17 +438,61 @@ class DepthAIGst
 };
 
 
+class DepthAICamCtrlSub : public rclcpp::Node
+{
+    public:
+        DepthAICamCtrlSub(DepthAIGst *depthAIGst)
+        : Node("depthai_cam_ctrl_sub"), mDepthAIGst(nullptr)
+        {
+            subscription_ = this->create_subscription<std_msgs::msg::String>(
+                "depthai_cam_cmd", 10, std::bind(&DepthAICamCtrlSub::depthai_rgb_cam_cmd_cb,
+                this, _1));
+            if (depthAIGst != nullptr) {
+                mDepthAIGst = depthAIGst;
+            }
+        }
+
+    private:
+        void depthai_rgb_cam_cmd_cb(const std_msgs::msg::String::SharedPtr msg) const
+        {
+            RCLCPP_INFO(this->get_logger(), "Command to process: '%s'", msg->data.c_str());
+            auto cmd = nlohmann::json::parse(msg->data.c_str());
+            if (!cmd["Encoding"].empty()) {
+                std::string encoding = cmd["Encoding"];
+                std::transform(encoding.begin(), encoding.end(),
+                    encoding.begin(), [](unsigned char c){ return std::tolower(c); });
+                if (encoding == "H265") {
+                    /* H265 */
+                } else {
+                    /* H264 is default */
+                }
+            }
+            if (!cmd["Command"].empty()) {
+                std::string command = cmd["Command"];
+                std::transform(command.begin(), command.end(),
+                    command.begin(), [](unsigned char c){ return std::tolower(c); });
+                if (command == "start") {
+                    RCLCPP_INFO(this->get_logger(), "Start DepthAI camera streaming.");
+                    mDepthAIGst->CreatePipeLine();
+                } else if (command == "stop") {
+                    RCLCPP_INFO(this->get_logger(), "Stop DepthAI camera streaming.");
+                }
+            }
+        }
+        rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_;
+        DepthAIGst *mDepthAIGst;
+};
+
+
 int main(int argc, char * argv[])
 {
     std::cout << "Init DepthAI Gstreamer pipeline." << std::endl;
     DepthAIGst depthAIGst(argc, argv);
 
-    depthAIGst.CreatePipeLine();
-
     rclcpp::init(argc, argv);
     
     std::cout << "Start ROS2 DepthAI subscriber." << std::endl;
-    rclcpp::spin(std::make_shared<DepthAICtrlSub>());
+    rclcpp::spin(std::make_shared<DepthAICamCtrlSub>(&depthAIGst));
 
     std::cout << "Stop ROS2 DepthAI subscriber." << std::endl;
     depthAIGst.StopStream();
