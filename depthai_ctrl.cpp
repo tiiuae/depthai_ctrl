@@ -96,10 +96,10 @@ class DepthAIGst
     public:
         DepthAIGst(int argc, char *argv[]) : depthAICam(nullptr), mLoop(nullptr), mPipeline(nullptr), mAppsrc(nullptr),
                                             mVideoconvert(nullptr), mH264enc(nullptr), mH264pay(nullptr),
-                                            mUdpSink(nullptr), mBus(nullptr), mEncQueue(nullptr), mNeedDataSignalId(0),
+                                            mUdpSink(nullptr), mBusWatchId(0), mBus(nullptr), mEncQueue(nullptr), mNeedDataSignalId(0),
                                             mPipeline2(nullptr), mAppsrc2(nullptr), mH264parse2(nullptr), mH264pay2(nullptr),
-                                            mUdpSink2(nullptr), mBus2(nullptr), mEncQueue2(nullptr), mNeedDataSignalId2(0),
-                                            mEnoughDataSignalId2(0)
+                                            mUdpSink2(nullptr), mBusWatchId2(0), mBus2(nullptr), mEncQueue2(nullptr), mNeedDataSignalId2(0),
+                                            mEnoughDataSignalId2(0), mLoopThread(nullptr)
         {
             gst_init(&argc, &argv);
             mLoop = g_main_loop_new(NULL, false);
@@ -128,7 +128,12 @@ class DepthAIGst
                 gst_object_unref(mBus);
                 mBus = nullptr;
             }
-            g_source_remove(mBusWatchId);
+            if (mBusWatchId != 0) {
+                g_source_remove(mBusWatchId);
+            }
+            if (mBusWatchId2 != 0) {
+                g_source_remove(mBusWatchId2);
+            }
         }
 
         void CreatePipeLine(void) {
@@ -215,22 +220,34 @@ class DepthAIGst
             if (mNeedDataSignalId2 != 0) {
                 g_signal_handler_disconnect(mAppsrc2, mNeedDataSignalId2);
             }
-            g_signal_emit_by_name(mAppsrc2, "end-of-stream", &ret2);
-            if (ret2 != GST_FLOW_OK) {
-                g_printerr("Error: Emit end-of-stream failed\n");
+            if (mAppsrc2 != nullptr) {
+                g_signal_emit_by_name(mAppsrc2, "end-of-stream", &ret2);
+                if (ret2 != GST_FLOW_OK) {
+                    g_printerr("Error: Emit end-of-stream failed\n");
+                }
             }
-            gst_element_set_state(mPipeline2, GST_STATE_NULL);
-            
+            if (mPipeline2 != nullptr) {
+                gst_element_set_state(mPipeline2, GST_STATE_NULL);
+            }
+
             if (mNeedDataSignalId != 0) {
                 g_signal_handler_disconnect(mAppsrc, mNeedDataSignalId);
             }
-            g_signal_emit_by_name(mAppsrc, "end-of-stream", &ret);
-            if (ret != GST_FLOW_OK) {
-                g_printerr("Error: Emit end-of-stream failed\n");
+            if (mAppsrc != nullptr) {
+                g_signal_emit_by_name(mAppsrc, "end-of-stream", &ret);
+                if (ret != GST_FLOW_OK) {
+                    g_printerr("Error: Emit end-of-stream failed\n");
+                }
             }
-            gst_element_set_state(mPipeline, GST_STATE_NULL);
-            g_main_loop_quit(mLoop);
-            g_thread_join(mLoopThread);
+            if (mPipeline != nullptr) {
+                gst_element_set_state(mPipeline, GST_STATE_NULL);
+            }
+            if (mLoop != nullptr) {
+                g_main_loop_quit(mLoop);
+            }
+            if (mLoopThread != nullptr) {
+                g_thread_join(mLoopThread);
+            }
         }
 
         DepthAICam *depthAICam;
@@ -411,8 +428,6 @@ class DepthAIGst
             g_print("%s\n", __FUNCTION__);
         }
 
-        GThread *mLoopThread;
-
     private:
         GMainLoop *mLoop;
         GstElement *mPipeline;
@@ -435,6 +450,7 @@ class DepthAIGst
         GstElement *mEncQueue2;
         guint mNeedDataSignalId2;
         guint mEnoughDataSignalId2;
+        GThread *mLoopThread;
 };
 
 
@@ -468,6 +484,10 @@ class DepthAICamCtrlSub : public rclcpp::Node
                 }
             }
             if (!cmd["Command"].empty()) {
+                if (mDepthAIGst == nullptr) {
+                    /* Do nothing if stream already running. */
+                    return;
+                }
                 std::string command = cmd["Command"];
                 std::transform(command.begin(), command.end(),
                     command.begin(), [](unsigned char c){ return std::tolower(c); });
