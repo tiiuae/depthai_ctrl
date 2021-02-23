@@ -22,6 +22,13 @@
 using std::placeholders::_1;
 
 
+#define DEPTHAI_CTRL_VER_MAJOR 0
+#define DEPTHAI_CTRL_VER_MINOR 1
+#define DEPTHAI_CTRL_VER_PATCH 0
+
+#define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 10000 + DEPTHAI_CTRL_VER_MINOR * 100 + DEPTHAI_CTRL_VER_PATCH)
+
+
 class DepthAICam
 {
     public:
