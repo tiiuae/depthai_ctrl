@@ -53,7 +53,7 @@ class DepthAICam
             colorCamXLinkIn->out.link(colorCam->inputControl);
 
             try {
-                device = new dai::Device(mPipeline, false);
+                device = new dai::Device(mPipeline, true);
             } catch (const std::runtime_error& err) {
                 std::cout << "DepthAI runtime error: " << err.what() << std::endl;
                 mIsDeviceAvailable = false;
