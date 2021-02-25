@@ -6,6 +6,16 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core ${CMAKE_CURRENT_BINARY_D
 
 project(depthai_ctrl_sub)
 
+# pkg-config configurations path.
+if(NOT DEFINED ENV{PKG_CONFIG_PATH})
+  set(ENV{PKG_CONFIG_PATH} "/usr/lib/x86_64-linux-gnu/pkgconfig/")
+else()
+  string(FIND "/usr/lib/x86_64-linux-gnu/pkgconfig/" $ENV{PKG_CONFIG_PATH} POS_INC_PATH)
+  if(${POS_INC_PATH} STREQUAL "-1")
+    set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/lib/x86_64-linux-gnu/pkgconfig/")
+  endif()
+endif()
+
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 14)
@@ -44,7 +54,4 @@ set_property(TARGET depthai_ctrl PROPERTY CXX_STANDARD 14)
 set_property(TARGET depthai_ctrl PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET depthai_ctrl PROPERTY CXX_EXTENSIONS OFF)
 
-install(TARGETS
-  depthai_ctrl
-  DESTINATION lib/${PROJECT_NAME}
-)
+install(TARGETS depthai_ctrl)
