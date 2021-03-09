@@ -23,7 +23,7 @@ using std::placeholders::_1;
 
 
 #define DEPTHAI_CTRL_VER_MAJOR 0
-#define DEPTHAI_CTRL_VER_MINOR 1
+#define DEPTHAI_CTRL_VER_MINOR 2
 #define DEPTHAI_CTRL_VER_PATCH 0
 
 #define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 10000 + DEPTHAI_CTRL_VER_MINOR * 100 + DEPTHAI_CTRL_VER_PATCH)
@@ -321,7 +321,7 @@ class DepthAICamCtrlSub : public rclcpp::Node
         : Node("depthai_cam_ctrl_sub"), mDepthAIGst(nullptr)
         {
             subscription_ = this->create_subscription<std_msgs::msg::String>(
-                "depthai_cam_cmd", 10, std::bind(&DepthAICamCtrlSub::depthai_rgb_cam_cmd_cb,
+                "videostreamcmd", 10, std::bind(&DepthAICamCtrlSub::depthai_rgb_cam_cmd_cb,
                 this, _1));
             if (depthAIGst != nullptr) {
                 mDepthAIGst = depthAIGst;
