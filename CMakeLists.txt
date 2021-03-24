@@ -55,3 +55,9 @@ set_property(TARGET depthai_ctrl PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET depthai_ctrl PROPERTY CXX_EXTENSIONS OFF)
 
 install(TARGETS depthai_ctrl)
+
+install(FILES
+    80-movidius.rules
+    DESTINATION /etc/udev/rules.d/
+    PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+    COMPONENT "udev_rules")
