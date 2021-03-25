@@ -22,16 +22,18 @@ Debian packages are generated into fog_sw/packaging folder
 ```
 $ cd build
 $ source /opt/ros/foxy/setup.bash
-$ ./depthai_ctrl ./depthai_ctrl --ros-args --remap __ns:=$(env DRONE_DEVICE_ID)
+$ export DRONE_DEVICE_ID=tredrone
+$ ./depthai_ctrl --ros-args --remap __ns:=/${DRONE_DEVICE_ID}
 ```
+NOTE: the DRONE_DEVICE_ID environment variable does not need to be set if it is already available in the environment.
 
 ## start streaming video for development
 Execute command in another shell session. <br>
 ```
 $ source /opt/ros/foxy/setup.bash
-$ ros2 topic pub -t 1 /$(env DRONE_DEVICE_ID)/videostreamcmd std_msgs/msg/String "data: '{ \"Command\": \"start\" }'"
+$ ros2 topic pub -t 1 /${DRONE_DEVICE_ID}/videostreamcmd std_msgs/msg/String "data: '{ \"Command\": \"start\" }'"
 ```
-The videonode is listening to the subscriber "/$(env DRONE_DEVICE_ID)/videostreamcmd".
+The videonode is listening to the subscriber "/${DRONE_DEVICE_ID}/videostreamcmd".
 
 ## show streamed video with GStreamer
 ```

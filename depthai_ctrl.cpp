@@ -23,7 +23,7 @@ using std::placeholders::_1;
 
 
 #define DEPTHAI_CTRL_VER_MAJOR 0
-#define DEPTHAI_CTRL_VER_MINOR 2
+#define DEPTHAI_CTRL_VER_MINOR 3
 #define DEPTHAI_CTRL_VER_PATCH 0
 
 #define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 10000 + DEPTHAI_CTRL_VER_MINOR * 100 + DEPTHAI_CTRL_VER_PATCH)
@@ -110,7 +110,8 @@ class DepthAIGst
     public:
         DepthAIGst(int argc, char *argv[]) : depthAICam(nullptr), mLoop(nullptr), mPipeline(nullptr), mAppsrc(nullptr),
                                             mH264parse(nullptr), mH264pay(nullptr), mUdpSink(nullptr), mBusWatchId(0),
-                                            mBus(nullptr), mNeedDataSignalId(0), mLoopThread(nullptr), mQueue1(nullptr)
+                                            mBus(nullptr), mNeedDataSignalId(0), mLoopThread(nullptr), mQueue1(nullptr),
+                                            mIsStreamPlaying(false)
         {
             gst_init(&argc, &argv);
             mLoop = g_main_loop_new(NULL, false);
@@ -145,6 +146,10 @@ class DepthAIGst
         }
 
         void CreatePipeLine(void) {
+            if (!depthAICam->IsDeviceAvailable()) {
+                g_printerr("Warning: device not available. Cannot start stream.\n");
+                return;
+            }
             mPipeline = gst_pipeline_new("camUDPSink_pipeline");
             mAppsrc = gst_element_factory_make("appsrc", "source");
             g_object_set(G_OBJECT(mAppsrc), "do-timestamp", true, NULL);
@@ -176,11 +181,8 @@ class DepthAIGst
 
             mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGst::PlayStream, this);
 
-            if (!depthAICam->IsDeviceAvailable()) {
-                return;
-            }
-
             mNeedDataSignalId = g_signal_connect(mAppsrc, "need-data", G_CALLBACK(NeedDataCallBack), this);
+            mIsStreamPlaying = true;
         }
 
         void StopStream(void)
@@ -205,7 +207,10 @@ class DepthAIGst
             if (mLoopThread != nullptr) {
                 g_thread_join(mLoopThread);
             }
+            mIsStreamPlaying = false;
         }
+
+        bool IsStreamPlaying(void) { return mIsStreamPlaying; }
 
         DepthAICam *depthAICam;
 
@@ -311,6 +316,7 @@ class DepthAIGst
         guint mNeedDataSignalId;
         GThread *mLoopThread;
         GstElement *mQueue1;
+        bool mIsStreamPlaying;
 };
 
 
@@ -352,8 +358,12 @@ class DepthAICamCtrlSub : public rclcpp::Node
                 std::transform(command.begin(), command.end(),
                     command.begin(), [](unsigned char c){ return std::tolower(c); });
                 if (command == "start") {
-                    RCLCPP_INFO(this->get_logger(), "Start DepthAI camera streaming.");
-                    mDepthAIGst->CreatePipeLine();
+                    if (!mDepthAIGst->IsStreamPlaying()) {
+                        RCLCPP_INFO(this->get_logger(), "Start DepthAI camera streaming.");
+                        mDepthAIGst->CreatePipeLine();
+                        return;
+                    }
+                    RCLCPP_INFO(this->get_logger(), "DepthAI camera already streaming.");
                 } else if (command == "stop") {
                     RCLCPP_INFO(this->get_logger(), "Stop DepthAI camera streaming.");
                 }
@@ -371,6 +381,9 @@ int main(int argc, char * argv[])
 
     rclcpp::init(argc, argv);
     
+    std::cout << "Start DepthAI GStreamer video stream." << std::endl;
+    depthAIGst.CreatePipeLine();
+
     std::cout << "Start ROS2 DepthAI subscriber." << std::endl;
     rclcpp::spin(std::make_shared<DepthAICamCtrlSub>(&depthAIGst));
 
