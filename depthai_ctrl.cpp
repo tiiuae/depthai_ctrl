@@ -324,7 +324,7 @@ class DepthAICamCtrlSub : public rclcpp::Node
 {
     public:
         DepthAICamCtrlSub(DepthAIGst *depthAIGst)
-        : Node("depthai_cam_ctrl_sub"), mDepthAIGst(nullptr)
+        : Node("depthai_cam_ctrl"), mDepthAIGst(nullptr)
         {
             subscription_ = this->create_subscription<std_msgs::msg::String>(
                 "videostreamcmd", 10, std::bind(&DepthAICamCtrlSub::depthai_rgb_cam_cmd_cb,
@@ -332,6 +332,7 @@ class DepthAICamCtrlSub : public rclcpp::Node
             if (depthAIGst != nullptr) {
                 mDepthAIGst = depthAIGst;
             }
+            this->declare_parameter<std::string>("encoding", "h264");
         }
 
     private:
