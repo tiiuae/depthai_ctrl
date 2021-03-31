@@ -1,6 +1,6 @@
-SUBSYSTEM=="usb", ACTION=="bind", ENV{ID_VENDOR_ID}=="03e7", MODE="0666", RUN+="/home/maseab/vm_disks/myriad_usb_hotplug.sh main-vm"
-SUBSYSTEM=="usb", ACTION=="remove", ENV{PRODUCT}=="3e7/2485/1", ENV{DEVTYPE}=="usb_device", MODE="0666", RUN+="/home/maseab/vm_disks/myriad_usb_hotplug.sh main-vm"
-SUBSYSTEM=="usb", ACTION=="remove", ENV{PRODUCT}=="3e7/f63b/100", ENV{DEVTYPE}=="usb_device", MODE="0666", RUN+="/home/maseab/vm_disks/myriad_usb_hotplug.sh main-vm"
+SUBSYSTEM=="usb", ACTION=="bind", ENV{ID_VENDOR_ID}=="03e7", MODE="0666", RUN+="/usr/local/bin/movidius_usb_hotplug.sh main-vm"
+SUBSYSTEM=="usb", ACTION=="remove", ENV{PRODUCT}=="3e7/2485/1", ENV{DEVTYPE}=="usb_device", MODE="0666", RUN+="/usr/local/bin/movidius_usb_hotplug.sh main-vm"
+SUBSYSTEM=="usb", ACTION=="remove", ENV{PRODUCT}=="3e7/f63b/100", ENV{DEVTYPE}=="usb_device", MODE="0666", RUN+="/usr/local/bin/movidius_usb_hotplug.sh main-vm"
 
 # In the guest machine use the following rules.
 #SUBSYSTEM=="usb", ATTRS{idProduct}=="2150", ATTRS{idVendor}=="03e7", GROUP="users", MODE="0666"
