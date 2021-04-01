@@ -18,15 +18,16 @@
 #include <nlohmann/json.hpp>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "std_msgs/msg/string.hpp"
 using std::placeholders::_1;
 
 
 #define DEPTHAI_CTRL_VER_MAJOR 0
-#define DEPTHAI_CTRL_VER_MINOR 3
-#define DEPTHAI_CTRL_VER_PATCH 0
+#define DEPTHAI_CTRL_VER_MINOR 4
+// The CI build will add a build number after the minor version.
 
-#define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 10000 + DEPTHAI_CTRL_VER_MINOR * 100 + DEPTHAI_CTRL_VER_PATCH)
+#define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 100 + DEPTHAI_CTRL_VER_MINOR)
 
 
 class DepthAICam
@@ -332,7 +333,24 @@ class DepthAICamCtrlSub : public rclcpp::Node
             if (depthAIGst != nullptr) {
                 mDepthAIGst = depthAIGst;
             }
-            this->declare_parameter<std::string>("encoding", "h264");
+            rcl_interfaces::msg::ParameterDescriptor encoding_desc;
+            encoding_desc.name = "encoding";
+            encoding_desc.type = rclcpp::PARAMETER_STRING;
+            encoding_desc.description = "Encoding format of the video stream.";
+            encoding_desc.additional_constraints = "Accepted values are h264 and h265.";
+            this->declare_parameter<std::string>("encoding", "h264", encoding_desc);
+            this->declare_parameter<int>("width", 1280);
+            this->declare_parameter<int>("height", 720);
+            this->declare_parameter<int>("fps", 25);
+            this->declare_parameter<int>("bitrate", 30000);
+            rcl_interfaces::msg::ParameterDescriptor start_stream_on_boot_desc;
+            start_stream_on_boot_desc.name = "start_stream_on_boot";
+            start_stream_on_boot_desc.type = rclcpp::PARAMETER_BOOL;
+            start_stream_on_boot_desc.description = "The node will start the video stream during " \
+                                                    "boot if set to true.";
+            start_stream_on_boot_desc.additional_constraints = "This parameter has no " \
+                                                    "effect after node has started.";
+            this->declare_parameter<bool>("start_stream_on_boot", false, start_stream_on_boot_desc);
         }
 
     private:
