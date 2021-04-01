@@ -1,0 +1,10 @@
+Package: depthai-ctrl-host
+Version: VERSION
+Maintainer: Manuel Segarra-Abad <manuel.segarra-abad@unikie.com>
+Architecture: amd64
+Depends: udev, libvirt-clients
+Conflicts: ros-foxy-depthai-ctrl
+Description: Provides udev rules for host machine
+ Provides udev rules for host machine. This package configures the passthrough
+ rules for DepthAI control ROS2 node running in guest virtual machine.
+

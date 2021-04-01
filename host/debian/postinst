@@ -1,0 +1,16 @@
+#!/bin/bash
+
+/usr/bin/udevadm control --reload-rules
+/usr/bin/udevadm trigger
+
+/usr/bin/virsh attach-device main-vm --config /dev/stdin <<END
+<hostdev mode='subsystem' type='usb'>
+  <source startupPolicy='optional'>
+    <vendor id='0x03e7'/>
+    <product id='0x2485'/>
+  </source>
+</hostdev>
+END
+
+exit 0
+

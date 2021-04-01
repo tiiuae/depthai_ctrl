@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Skip this if command executed was purge
+if [ "${1}" == "purge" ]; then
+  echo "INFO: already clean. Nothing to do with purge."
+  exit 0
+fi
+
+/usr/bin/virsh detach-device main-vm --config /dev/stdin <<END
+<hostdev mode='subsystem' type='usb'>
+  <source startupPolicy='optional'>
+    <vendor id='0x03e7'/>
+    <product id='0x2485'/>
+  </source>
+</hostdev>
+END
+
+/usr/bin/udevadm control --reload-rules
+/usr/bin/udevadm trigger
+
+exit 0
+
