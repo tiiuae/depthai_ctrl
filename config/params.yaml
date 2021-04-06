@@ -1,9 +1,0 @@
-# Maybe use an environment variable replacement for the namespace.
-tredrone_ns:
-  depthai_cam_ctrl_sub:
-    ros__parameters:
-      width: 1280
-      height: 720
-      fps: 30
-      encoding: "h264"
-
