@@ -33,7 +33,9 @@ using std::placeholders::_1;
 class DepthAICam
 {
     public:
-        DepthAICam() : device(nullptr)
+        DepthAICam() : device(nullptr), mIsDeviceAvailable(true), mEncoderWidth(1280),
+                       mEncoderHeight(720), mEncoderFps(25),
+                       mEncoderProfile(dai::VideoEncoderProperties::Profile::H264_MAIN)
         {
             colorCam = mPipeline.create<dai::node::ColorCamera>();
             colorCamVideoEnc = mPipeline.create<dai::node::VideoEncoder>();
@@ -41,10 +43,13 @@ class DepthAICam
 
             colorCamXLinkOut->setStreamName("enc264Color");
             colorCam->setBoardSocket(dai::CameraBoardSocket::RGB);
-            colorCam->setVideoSize(1280, 720);
+            colorCam->setVideoSize(mEncoderWidth, mEncoderHeight);
             colorCam->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
 
-            colorCamVideoEnc->setDefaultProfilePreset(1280, 720, 25, dai::VideoEncoderProperties::Profile::H264_MAIN);
+            colorCamVideoEnc->setDefaultProfilePreset(mEncoderWidth,
+                                                    mEncoderHeight,
+                                                    mEncoderFps,
+                                                    mEncoderProfile);
             colorCam->video.link(colorCamVideoEnc->input);
             colorCamVideoEnc->bitstream.link(colorCamXLinkOut->input);
 
@@ -93,6 +98,63 @@ class DepthAICam
             return mIsDeviceAvailable;
         }
 
+        void SetEncoderWidth(int width)
+        {
+            if (width > 4096) {
+                g_printerr("Width must be smaller than 4096 for H26x encoder profile.\n");
+                return;
+            }
+            if (width % 8 != 0) {
+                g_printerr("Width must be multiple of 8 for H26x encoder profile.\n");
+                return;
+            }
+            mEncoderWidth = width;
+        }
+
+        int GetEncoderWidth() { return mEncoderWidth; }
+
+        void SetEncoderHeight(int height)
+        {
+            if (height > 4096) {
+                g_printerr("Height must be smaller than 4096 for H26x encoder profile.\n");
+                return;
+            }
+            if (height % 8 != 0) {
+                g_printerr("Height must be multiple of 8 for H26x encoder profile.\n");
+                return;
+            }
+            mEncoderHeight = height;
+        }
+
+        int GetEncoderHeight() { return mEncoderHeight; }
+
+        void SetEncoderFps(int fps)
+        {
+            if (fps > 60) {
+                g_printerr("Too high frames per second.\n");
+                return;
+            }
+            mEncoderFps = fps;
+        }
+
+        int GetEncoderFps() { return mEncoderFps; }
+
+        void SetEncoderProfile(std::string profile)
+        {
+            transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
+            if (profile != "H264" && profile != "H265") {
+                g_printerr("Not valid H26x profile.\n");
+                return;
+            }
+            if (profile == "H265") {
+                mEncoderProfile = dai::VideoEncoderProperties::Profile::H265_MAIN;
+            } else {
+                mEncoderProfile = dai::VideoEncoderProperties::Profile::H264_MAIN;
+            }
+        }
+
+        const dai::VideoEncoderProperties::Profile & GetEncoderProfile() { return mEncoderProfile; }
+
     private:
         dai::Device *device;
         dai::Pipeline mPipeline;
@@ -102,7 +164,11 @@ class DepthAICam
         std::shared_ptr<dai::node::XLinkOut> colorCamXLinkOut;
         std::shared_ptr<dai::node::XLinkIn> colorCamXLinkIn;
         std::shared_ptr<dai::DataInputQueue> colorCamInput;
-        bool mIsDeviceAvailable = true;
+        bool mIsDeviceAvailable;
+        int mEncoderWidth;
+        int mEncoderHeight;
+        int mEncoderFps;
+        dai::VideoEncoderProperties::Profile mEncoderProfile;
 };
 
 
@@ -110,9 +176,10 @@ class DepthAIGst
 {
     public:
         DepthAIGst(int argc, char *argv[]) : depthAICam(nullptr), mLoop(nullptr), mPipeline(nullptr), mAppsrc(nullptr),
-                                            mH264parse(nullptr), mH264pay(nullptr), mUdpSink(nullptr), mBusWatchId(0),
+                                            mH26xparse(nullptr), mH26xpay(nullptr), mUdpSink(nullptr), mBusWatchId(0),
                                             mBus(nullptr), mNeedDataSignalId(0), mLoopThread(nullptr), mQueue1(nullptr),
-                                            mIsStreamPlaying(false)
+                                            mIsStreamPlaying(false), mEncoderWidth(1280), mEncoderHeight(720),
+                                            mEncoderFps(25), mEncoderProfile("H264")
         {
             gst_init(&argc, &argv);
             mLoop = g_main_loop_new(NULL, false);
@@ -158,18 +225,32 @@ class DepthAIGst
             g_object_set(G_OBJECT(mAppsrc), "block", true, NULL);
             g_object_set(G_OBJECT(mAppsrc), "stream-type", 0, NULL);
             gst_util_set_object_arg(G_OBJECT(mAppsrc), "format", "GST_FORMAT_TIME");
-            mH264parse = gst_element_factory_make("h264parse", "parser");
+            if (mEncoderProfile == "H265") {
+                mH26xparse = gst_element_factory_make("h265parse", "parser");
+            } else {
+                mH26xparse = gst_element_factory_make("h264parse", "parser");
+            }
             mQueue1 = gst_element_factory_make("queue", "queue1");
-            mH264pay = gst_element_factory_make("rtph264pay", "payload");
-            g_object_set(G_OBJECT(mH264pay), "pt", 96, NULL);
+            if (mEncoderProfile == "H265") {
+                mH26xpay = gst_element_factory_make("rtph265pay", "payload");
+            } else {
+                mH26xpay = gst_element_factory_make("rtph264pay", "payload");
+            }
+            g_object_set(G_OBJECT(mH26xpay), "pt", 96, NULL);
             mUdpSink = gst_element_factory_make("udpsink", "udp_sink");
             g_object_set(G_OBJECT(mUdpSink), "host", "127.0.0.1", NULL);
             g_object_set(G_OBJECT(mUdpSink), "port", 5600, NULL);
+            std::string profile = mEncoderProfile;
+            std::stringstream ss;
+            std::string gstFormat;
+            transform(profile.begin(), profile.end(), profile.begin(), ::tolower);
+            ss << "video/x-" << profile;
+            ss >> gstFormat;
             g_object_set(G_OBJECT(mAppsrc), "caps",
-                gst_caps_new_simple("video/x-h264",
-                    "width", G_TYPE_INT, 1280,
-                    "height", G_TYPE_INT, 720,
-                    "framerate", GST_TYPE_FRACTION, 25, 1,
+                gst_caps_new_simple(gstFormat.c_str(),
+                    "width", G_TYPE_INT, mEncoderWidth,
+                    "height", G_TYPE_INT, mEncoderHeight,
+                    "framerate", GST_TYPE_FRACTION, mEncoderFps, 1,
                     NULL), NULL);
 
             mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
@@ -177,8 +258,8 @@ class DepthAIGst
             gst_object_unref(mBus);
             mBus = nullptr;
             
-            gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH264parse, mQueue1, mH264pay, mUdpSink, NULL);
-            gst_element_link_many(mAppsrc, mH264parse, mQueue1, mH264pay, mUdpSink, NULL);
+            gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
+            gst_element_link_many(mAppsrc, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
 
             mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGst::PlayStream, this);
 
@@ -212,6 +293,59 @@ class DepthAIGst
         }
 
         bool IsStreamPlaying(void) { return mIsStreamPlaying; }
+
+        void SetEncoderWidth(int width)
+        {
+            if (width > 4096) {
+                g_printerr("Width must be smaller than 4096 for H26x encoder profile.\n");
+                return;
+            }
+            if (width % 8 != 0) {
+                g_printerr("Width must be multiple of 8 for H26x encoder profile.\n");
+                return;
+            }
+            mEncoderWidth = width;
+        }
+
+        int GetEncoderWidth() { return mEncoderWidth; }
+
+        void SetEncoderHeight(int height)
+        {
+            if (height > 4096) {
+                g_printerr("Height must be smaller than 4096 for H26x encoder profile.\n");
+                return;
+            }
+            if (height % 8 != 0) {
+                g_printerr("Height must be multiple of 8 for H26x encoder profile.\n");
+                return;
+            }
+            mEncoderHeight = height;
+        }
+
+        int GetEncoderHeight() { return mEncoderHeight; }
+
+        void SetEncoderFps(int fps)
+        {
+            if (fps > 60) {
+                g_printerr("Too high frames per second.\n");
+                return;
+            }
+            mEncoderFps = fps;
+        }
+
+        int GetEncoderFps() { return mEncoderFps; }
+
+        void SetEncoderProfile(std::string profile)
+        {
+            transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
+            if (profile != "H264" && profile != "H265") {
+                g_printerr("Not valid H26x profile.\n");
+                return;
+            }
+            mEncoderProfile = profile;
+        }
+
+        const std::string & GetEncoderProfile() { return mEncoderProfile; }
 
         DepthAICam *depthAICam;
 
@@ -309,8 +443,8 @@ class DepthAIGst
         GMainLoop *mLoop;
         GstElement *mPipeline;
         GstElement *mAppsrc;
-        GstElement *mH264parse;
-        GstElement *mH264pay;
+        GstElement *mH26xparse;
+        GstElement *mH26xpay;
         GstElement *mUdpSink;
         guint mBusWatchId;
         GstBus *mBus;
@@ -318,17 +452,21 @@ class DepthAIGst
         GThread *mLoopThread;
         GstElement *mQueue1;
         bool mIsStreamPlaying;
+        int mEncoderWidth;
+        int mEncoderHeight;
+        int mEncoderFps;
+        std::string mEncoderProfile;
 };
 
 
-class DepthAICamCtrlSub : public rclcpp::Node
+class DepthAICamCtrl : public rclcpp::Node
 {
     public:
-        DepthAICamCtrlSub(DepthAIGst *depthAIGst)
+        DepthAICamCtrl(DepthAIGst *depthAIGst)
         : Node("depthai_cam_ctrl"), mDepthAIGst(nullptr)
         {
             subscription_ = this->create_subscription<std_msgs::msg::String>(
-                "videostreamcmd", 10, std::bind(&DepthAICamCtrlSub::depthai_rgb_cam_cmd_cb,
+                "videostreamcmd", 10, std::bind(&DepthAICamCtrl::depthai_rgb_cam_cmd_cb,
                 this, _1));
             if (depthAIGst != nullptr) {
                 mDepthAIGst = depthAIGst;
@@ -337,8 +475,8 @@ class DepthAICamCtrlSub : public rclcpp::Node
             encoding_desc.name = "encoding";
             encoding_desc.type = rclcpp::PARAMETER_STRING;
             encoding_desc.description = "Encoding format of the video stream.";
-            encoding_desc.additional_constraints = "Accepted values are h264 and h265.";
-            this->declare_parameter<std::string>("encoding", "h264", encoding_desc);
+            encoding_desc.additional_constraints = "Accepted values are H264 and H265.";
+            this->declare_parameter<std::string>("encoding", "H264", encoding_desc);
             this->declare_parameter<int>("width", 1280);
             this->declare_parameter<int>("height", 720);
             this->declare_parameter<int>("fps", 25);
@@ -351,9 +489,59 @@ class DepthAICamCtrlSub : public rclcpp::Node
             start_stream_on_boot_desc.additional_constraints = "This parameter has no " \
                                                     "effect after node has started.";
             this->declare_parameter<bool>("start_stream_on_boot", false, start_stream_on_boot_desc);
+
+            param_cb_handle = rclcpp::Node::add_on_set_parameters_callback(
+                std::bind(&DepthAICamCtrl::depthai_set_param_cb, this, _1));
+
+            if (this->get_parameter("start_stream_on_boot").as_bool()) {
+                RCLCPP_INFO(this->get_logger(), "Start DepthAI GStreamer video stream.");
+                depthAIGst->CreatePipeLine();
+            }
         }
 
     private:
+        rcl_interfaces::msg::SetParametersResult
+        depthai_set_param_cb(const std::vector<rclcpp::Parameter> & parameters)
+        {
+            rcl_interfaces::msg::SetParametersResult result;
+            result.successful = true;
+            for (const auto & parameter : parameters) {
+                if (parameter.get_name() == "encoding") {
+                    std::string encoding_val = parameter.as_string();
+                    transform(encoding_val.begin(), encoding_val.end(), encoding_val.begin(), ::toupper);
+                    if ((encoding_val != "H264") && (encoding_val != "H265")) {
+                        result.successful = false;
+                        result.reason = "Not valid encoding. Allowed H264 and H265.";
+                    }
+                }
+
+                if (parameter.get_name() == "width") {
+                    int width_val = parameter.as_int();
+                    if (width_val % 8 != 0) {
+                        result.successful = false;
+                        result.reason = "Width must be multiple of 8 for H26x encoder profile.";
+                    }
+                    if (width_val > 4096) {
+                        result.successful = false;
+                        result.reason = "Width must be smaller than 4096 for H26x encoder profile.";
+                    }
+                }
+
+                if (parameter.get_name() == "height") {
+                    int height_val = parameter.as_int();
+                    if (height_val % 8 != 0) {
+                        result.successful = false;
+                        result.reason = "Heigth must be multiple of 8 for H26x encoder profile.";
+                    }
+                    if (height_val > 4096) {
+                        result.successful = false;
+                        result.reason = "Height must be smaller than 4096 for H26x encoder profile.";
+                    }
+                }
+            }
+            return result;
+        }
+
         void depthai_rgb_cam_cmd_cb(const std_msgs::msg::String::SharedPtr msg) const
         {
             RCLCPP_INFO(this->get_logger(), "Command to process: '%s'", msg->data.c_str());
@@ -390,6 +578,7 @@ class DepthAICamCtrlSub : public rclcpp::Node
         }
         rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_;
         DepthAIGst *mDepthAIGst;
+        OnSetParametersCallbackHandle::SharedPtr param_cb_handle;
 };
 
 
@@ -399,12 +588,9 @@ int main(int argc, char * argv[])
     DepthAIGst depthAIGst(argc, argv);
 
     rclcpp::init(argc, argv);
-    
-    std::cout << "Start DepthAI GStreamer video stream." << std::endl;
-    depthAIGst.CreatePipeLine();
 
     std::cout << "Start ROS2 DepthAI subscriber." << std::endl;
-    rclcpp::spin(std::make_shared<DepthAICamCtrlSub>(&depthAIGst));
+    rclcpp::spin(std::make_shared<DepthAICamCtrl>(&depthAIGst));
 
     std::cout << "Stop ROS2 DepthAI subscriber." << std::endl;
     depthAIGst.StopStream();
