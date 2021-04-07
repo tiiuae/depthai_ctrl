@@ -517,6 +517,10 @@ class DepthAICamCtrl : public rclcpp::Node
                 std::bind(&DepthAICamCtrl::depthai_set_param_cb, this, _1));
 
             if (this->get_parameter("start_stream_on_boot").as_bool()) {
+                mDepthAIGst->SetEncoderWidth(this->get_parameter("width").as_int());
+                mDepthAIGst->SetEncoderHeight(this->get_parameter("height").as_int());
+                mDepthAIGst->SetEncoderFps(this->get_parameter("fps").as_int());
+                mDepthAIGst->SetEncoderProfile(this->get_parameter("encoding").as_string());
                 RCLCPP_INFO(this->get_logger(), "Start DepthAI GStreamer video stream.");
                 depthAIGst->CreatePipeLine();
             }
