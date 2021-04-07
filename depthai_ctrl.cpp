@@ -530,7 +530,7 @@ class DepthAICamCtrl : public rclcpp::Node
                                                     "boot if set to true.";
             start_stream_on_boot_desc.additional_constraints = "This parameter has no " \
                                                     "effect after node has started.";
-            this->declare_parameter<bool>("start_stream_on_boot", false, start_stream_on_boot_desc);
+            this->declare_parameter<bool>("start_stream_on_boot", true, start_stream_on_boot_desc);
 
             param_cb_handle = rclcpp::Node::add_on_set_parameters_callback(
                 std::bind(&DepthAICamCtrl::depthai_set_param_cb, this, _1));
