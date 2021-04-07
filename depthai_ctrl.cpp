@@ -37,27 +37,6 @@ class DepthAICam
                        mEncoderHeight(720), mEncoderFps(25),
                        mEncoderProfile(dai::VideoEncoderProperties::Profile::H264_MAIN)
         {
-            colorCam = mPipeline.create<dai::node::ColorCamera>();
-            colorCamVideoEnc = mPipeline.create<dai::node::VideoEncoder>();
-            colorCamXLinkOut = mPipeline.create<dai::node::XLinkOut>();
-
-            colorCamXLinkOut->setStreamName("enc264Color");
-            colorCam->setBoardSocket(dai::CameraBoardSocket::RGB);
-            colorCam->setVideoSize(mEncoderWidth, mEncoderHeight);
-            colorCam->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
-
-            colorCamVideoEnc->setDefaultProfilePreset(mEncoderWidth,
-                                                    mEncoderHeight,
-                                                    mEncoderFps,
-                                                    mEncoderProfile);
-            colorCam->video.link(colorCamVideoEnc->input);
-            colorCamVideoEnc->bitstream.link(colorCamXLinkOut->input);
-
-            colorCamXLinkIn = mPipeline.create<dai::node::XLinkIn>();
-            colorCamXLinkIn->setStreamName("colorCamCtrl");
-
-            colorCamXLinkIn->out.link(colorCam->inputControl);
-
             try {
                 device = new dai::Device(mPipeline, true);
             } catch (const std::runtime_error& err) {
@@ -76,9 +55,20 @@ class DepthAICam
         void StartStreaming(void)
         {
             if (mIsDeviceAvailable) {
+                if (device != nullptr) {
+                    delete(device);
+                }
+                BuildPipeline();
+                try {
+                    device = new dai::Device(mPipeline, true);
+                } catch (const std::runtime_error& err) {
+                    std::cout << "DepthAI runtime error: " << err.what() << std::endl;
+                    mIsDeviceAvailable = false;
+                    return;
+                }
                 device->startPipeline();
 
-                encColorOutput = device->getOutputQueue("enc264Color", 30, true);
+                encColorOutput = device->getOutputQueue("enc26xColor", 30, true);
                 colorCamInput = device->getInputQueue("colorCamCtrl");
 
                 dai::CameraControl colorCamCtrl;
@@ -96,6 +86,30 @@ class DepthAICam
         bool IsDeviceAvailable(void)
         {
             return mIsDeviceAvailable;
+        }
+
+        void BuildPipeline(void)
+        {
+            colorCam = mPipeline.create<dai::node::ColorCamera>();
+            colorCamVideoEnc = mPipeline.create<dai::node::VideoEncoder>();
+            colorCamXLinkOut = mPipeline.create<dai::node::XLinkOut>();
+
+            colorCamXLinkOut->setStreamName("enc26xColor");
+            colorCam->setBoardSocket(dai::CameraBoardSocket::RGB);
+            colorCam->setVideoSize(mEncoderWidth, mEncoderHeight);
+            colorCam->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
+
+            colorCamVideoEnc->setDefaultProfilePreset(mEncoderWidth,
+                                                    mEncoderHeight,
+                                                    mEncoderFps,
+                                                    mEncoderProfile);
+            colorCam->video.link(colorCamVideoEnc->input);
+            colorCamVideoEnc->bitstream.link(colorCamXLinkOut->input);
+
+            colorCamXLinkIn = mPipeline.create<dai::node::XLinkIn>();
+            colorCamXLinkIn->setStreamName("colorCamCtrl");
+
+            colorCamXLinkIn->out.link(colorCam->inputControl);
         }
 
         void SetEncoderWidth(int width)
@@ -141,7 +155,7 @@ class DepthAICam
 
         void SetEncoderProfile(std::string profile)
         {
-            transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
+            std::transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
             if (profile != "H264" && profile != "H265") {
                 g_printerr("Not valid H26x profile.\n");
                 return;
@@ -179,7 +193,7 @@ class DepthAIGst
                                             mH26xparse(nullptr), mH26xpay(nullptr), mUdpSink(nullptr), mBusWatchId(0),
                                             mBus(nullptr), mNeedDataSignalId(0), mLoopThread(nullptr), mQueue1(nullptr),
                                             mIsStreamPlaying(false), mEncoderWidth(1280), mEncoderHeight(720),
-                                            mEncoderFps(25), mEncoderProfile("H264")
+                                            mEncoderFps(25), mEncoderProfile("H264"), mGstTimestamp(0)
         {
             gst_init(&argc, &argv);
             mLoop = g_main_loop_new(NULL, false);
@@ -243,7 +257,7 @@ class DepthAIGst
             std::string profile = mEncoderProfile;
             std::stringstream ss;
             std::string gstFormat;
-            transform(profile.begin(), profile.end(), profile.begin(), ::tolower);
+            std::transform(profile.begin(), profile.end(), profile.begin(), ::tolower);
             ss << "video/x-" << profile;
             ss >> gstFormat;
             g_object_set(G_OBJECT(mAppsrc), "caps",
@@ -305,6 +319,7 @@ class DepthAIGst
                 return;
             }
             mEncoderWidth = width;
+            depthAICam->SetEncoderWidth(mEncoderWidth);
         }
 
         int GetEncoderWidth() { return mEncoderWidth; }
@@ -320,6 +335,7 @@ class DepthAIGst
                 return;
             }
             mEncoderHeight = height;
+            depthAICam->SetEncoderHeight(mEncoderHeight);
         }
 
         int GetEncoderHeight() { return mEncoderHeight; }
@@ -331,18 +347,20 @@ class DepthAIGst
                 return;
             }
             mEncoderFps = fps;
+            depthAICam->SetEncoderFps(mEncoderFps);
         }
 
         int GetEncoderFps() { return mEncoderFps; }
 
         void SetEncoderProfile(std::string profile)
         {
-            transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
+            std::transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
             if (profile != "H264" && profile != "H265") {
                 g_printerr("Not valid H26x profile.\n");
                 return;
             }
             mEncoderProfile = profile;
+            depthAICam->SetEncoderProfile(mEncoderProfile);
         }
 
         const std::string & GetEncoderProfile() { return mEncoderProfile; }
@@ -431,6 +449,10 @@ class DepthAIGst
             buffer = gst_buffer_new_allocate(NULL, size, NULL);
             gst_buffer_fill(buffer, 0, (gconstpointer)(frame->getData().data()), size);
 
+            GST_BUFFER_PTS(buffer) = depthAIGst->mGstTimestamp;
+            GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, (int)depthAIGst->mEncoderFps);
+            depthAIGst->mGstTimestamp += GST_BUFFER_DURATION(buffer);
+
             g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);
             gst_buffer_unref(buffer);
             if (ret != GST_FLOW_OK) {
@@ -456,6 +478,7 @@ class DepthAIGst
         int mEncoderHeight;
         int mEncoderFps;
         std::string mEncoderProfile;
+        GstClockTime mGstTimestamp;
 };
 
 
@@ -508,7 +531,7 @@ class DepthAICamCtrl : public rclcpp::Node
             for (const auto & parameter : parameters) {
                 if (parameter.get_name() == "encoding") {
                     std::string encoding_val = parameter.as_string();
-                    transform(encoding_val.begin(), encoding_val.end(), encoding_val.begin(), ::toupper);
+                    std::transform(encoding_val.begin(), encoding_val.end(), encoding_val.begin(), ::toupper);
                     if ((encoding_val != "H264") && (encoding_val != "H265")) {
                         result.successful = false;
                         result.reason = "Not valid encoding. Allowed H264 and H265.";
@@ -566,6 +589,10 @@ class DepthAICamCtrl : public rclcpp::Node
                     command.begin(), [](unsigned char c){ return std::tolower(c); });
                 if (command == "start") {
                     if (!mDepthAIGst->IsStreamPlaying()) {
+                        mDepthAIGst->SetEncoderWidth(this->get_parameter("width").as_int());
+                        mDepthAIGst->SetEncoderHeight(this->get_parameter("height").as_int());
+                        mDepthAIGst->SetEncoderFps(this->get_parameter("fps").as_int());
+                        mDepthAIGst->SetEncoderProfile(this->get_parameter("encoding").as_string());
                         RCLCPP_INFO(this->get_logger(), "Start DepthAI camera streaming.");
                         mDepthAIGst->CreatePipeLine();
                         return;
