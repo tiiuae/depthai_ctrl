@@ -34,7 +34,7 @@ class DepthAICam
 {
     public:
         DepthAICam() : device(nullptr), mIsDeviceAvailable(true), mEncoderWidth(1280),
-                       mEncoderHeight(720), mEncoderFps(25),
+                       mEncoderHeight(720), mEncoderFps(25), mEncoderBitrate(3000000),
                        mEncoderProfile(dai::VideoEncoderProperties::Profile::H264_MAIN)
         {
             try {
@@ -103,6 +103,7 @@ class DepthAICam
                                                     mEncoderHeight,
                                                     mEncoderFps,
                                                     mEncoderProfile);
+            colorCamVideoEnc->setBitrate(mEncoderBitrate);
             colorCam->video.link(colorCamVideoEnc->input);
             colorCamVideoEnc->bitstream.link(colorCamXLinkOut->input);
 
@@ -153,6 +154,13 @@ class DepthAICam
 
         int GetEncoderFps() { return mEncoderFps; }
 
+        void SetEncoderBitrate(int bitrate)
+        {
+            mEncoderBitrate = bitrate;
+        }
+
+        int GetEncoderBitrate() { return mEncoderBitrate; }
+
         void SetEncoderProfile(std::string profile)
         {
             std::transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
@@ -182,6 +190,7 @@ class DepthAICam
         int mEncoderWidth;
         int mEncoderHeight;
         int mEncoderFps;
+        int mEncoderBitrate;
         dai::VideoEncoderProperties::Profile mEncoderProfile;
 };
 
@@ -193,7 +202,8 @@ class DepthAIGst
                                             mH26xparse(nullptr), mH26xpay(nullptr), mUdpSink(nullptr), mBusWatchId(0),
                                             mBus(nullptr), mNeedDataSignalId(0), mLoopThread(nullptr), mQueue1(nullptr),
                                             mIsStreamPlaying(false), mEncoderWidth(1280), mEncoderHeight(720),
-                                            mEncoderFps(25), mEncoderProfile("H264"), mGstTimestamp(0)
+                                            mEncoderFps(25), mEncoderBitrate(3000000), mEncoderProfile("H264"),
+                                            mGstTimestamp(0)
         {
             gst_init(&argc, &argv);
             mLoop = g_main_loop_new(NULL, false);
@@ -352,6 +362,14 @@ class DepthAIGst
 
         int GetEncoderFps() { return mEncoderFps; }
 
+        void SetEncoderBitrate(int bitrate)
+        {
+            mEncoderBitrate = bitrate;
+            depthAICam->SetEncoderBitrate(mEncoderBitrate);
+        }
+
+        int GetEncoderBitrate() { return mEncoderBitrate; }
+
         void SetEncoderProfile(std::string profile)
         {
             std::transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
@@ -477,6 +495,7 @@ class DepthAIGst
         int mEncoderWidth;
         int mEncoderHeight;
         int mEncoderFps;
+        int mEncoderBitrate;
         std::string mEncoderProfile;
         GstClockTime mGstTimestamp;
 };
@@ -503,7 +522,7 @@ class DepthAICamCtrl : public rclcpp::Node
             this->declare_parameter<int>("width", 1280);
             this->declare_parameter<int>("height", 720);
             this->declare_parameter<int>("fps", 25);
-            this->declare_parameter<int>("bitrate", 30000);
+            this->declare_parameter<int>("bitrate", 3000000);
             rcl_interfaces::msg::ParameterDescriptor start_stream_on_boot_desc;
             start_stream_on_boot_desc.name = "start_stream_on_boot";
             start_stream_on_boot_desc.type = rclcpp::PARAMETER_BOOL;
@@ -520,6 +539,7 @@ class DepthAICamCtrl : public rclcpp::Node
                 mDepthAIGst->SetEncoderWidth(this->get_parameter("width").as_int());
                 mDepthAIGst->SetEncoderHeight(this->get_parameter("height").as_int());
                 mDepthAIGst->SetEncoderFps(this->get_parameter("fps").as_int());
+                mDepthAIGst->SetEncoderBitrate(this->get_parameter("bitrate").as_int());
                 mDepthAIGst->SetEncoderProfile(this->get_parameter("encoding").as_string());
                 RCLCPP_INFO(this->get_logger(), "Start DepthAI GStreamer video stream.");
                 depthAIGst->CreatePipeLine();
