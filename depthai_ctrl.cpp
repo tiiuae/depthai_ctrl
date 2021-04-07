@@ -573,16 +573,6 @@ class DepthAICamCtrl : public rclcpp::Node
         {
             RCLCPP_INFO(this->get_logger(), "Command to process: '%s'", msg->data.c_str());
             auto cmd = nlohmann::json::parse(msg->data.c_str());
-            if (!cmd["Encoding"].empty()) {
-                std::string encoding = cmd["Encoding"];
-                std::transform(encoding.begin(), encoding.end(),
-                    encoding.begin(), [](unsigned char c){ return std::tolower(c); });
-                if (encoding == "H265") {
-                    /* H265 */
-                } else {
-                    /* H264 is default */
-                }
-            }
             if (!cmd["Command"].empty()) {
                 if (mDepthAIGst == nullptr) {
                     /* Do nothing if stream already running. */
