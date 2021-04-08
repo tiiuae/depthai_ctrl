@@ -35,6 +35,21 @@ $ ros2 topic pub -t 1 /${DRONE_DEVICE_ID}/videostreamcmd std_msgs/msg/String "da
 ```
 The videonode is listening to the subscriber "/${DRONE_DEVICE_ID}/videostreamcmd".
 
+## list node parameters
+Execute command in another shell session or a session where ROS2 environment is available. <br>
+```
+$ source /opt/ros/foxy/setup.bash
+$ ros2 param list
+```
+
+## start appication setting parameters
+```
+$ source /opt/ros/foxy/setup.bash
+$ export DRONE_DEVICE_ID=tredrone
+$ ./depthai_ctrl --ros-args --remap __ns:=/${DRONE_DEVICE_ID} -p start_stream_on_boot:=true -p encoding:=H265
+```
+The command above will start the ROS2 node depthai_ctrl and right after boot it will start streaming H265 encoded video.
+
 ## show streamed video with GStreamer
 ```
 $ gst-launch-1.0 udpsrc port=5600 \
@@ -58,7 +73,6 @@ $ gst-launch-1.0 -e udpsrc port=5600 \
 # TODO list
 * Refactor code: split code into several files.
 * Add method to restart streaming.
-* Add options to the stream: H265 encoding, resolution.
 * Add monitoring information of the OAK-D to the ROS2 node.
 * Add manual focus settings to ROS2 node.
 
