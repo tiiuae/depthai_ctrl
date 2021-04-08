@@ -30,6 +30,7 @@ jobs:
           mkdir bin
           pushd fogsw-ci-scripts
           ./generate_deb.sh ../depthai_ctrl ../bin/
+          ./generate_deb.sh ../depthai_ctrl ../bin/ ../depthai_ctrl/host/
           popd
 
       - name: Install jfrog CLI tool
@@ -58,6 +59,11 @@ jobs:
           jfrog rt c import "$ARTIFACTORY_TOKEN"
           jfrog rt ping
           pkg=$(find bin -name 'ros-foxy-depthai-ctrl*.deb')
+          jfrog rt u --deb "$DISTRIBUTION/$COMPONENT/$ARCHITECTURE" \
+                     --target-props COMMIT="$GITHUB_SHA" \
+                     "$pkg" \
+                     "$ARTIFACTORY_REPO"
+          pkg=$(find bin -name 'depthai-ctrl-host*.deb')
           jfrog rt u --deb "$DISTRIBUTION/$COMPONENT/$ARCHITECTURE" \
                      --target-props COMMIT="$GITHUB_SHA" \
                      "$pkg" \
