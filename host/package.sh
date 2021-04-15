@@ -1,7 +1,7 @@
 #!/bin/bash
 
 get_version() {
-    version=1.0.0~$(git describe --always --tags --match "[0-9]*.[0-9]*.[0-9]*")
+    version=1.1.0~$(git describe --always --tags --match "[0-9]*.[0-9]*.[0-9]*")
     echo ${version}
 }
 

@@ -15,7 +15,7 @@ if [ -z "${DOMAIN}" ]; then
   exit 1
 fi
 
-IFS=: read VAR1 VAR2 <<< $(virsh dominfo main-vm | grep State)
+IFS=: read VAR1 VAR2 <<< $(virsh dominfo ${DOMAIN} | grep State)
 DOMAIN_STATE="$(echo -e "${VAR2}" | tr -d '[:space:]')"
 if [ "${DOMAIN_STATE}" != 'running' ]; then
   echo "Domain ${DOMAIN} state (${DOMAIN_STATE}) is not running. Nothing to do to DepthAI camera." >&2
