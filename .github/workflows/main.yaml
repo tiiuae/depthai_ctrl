@@ -30,7 +30,7 @@ jobs:
           mkdir bin
           pushd fogsw-ci-scripts
           ./generate_deb.sh ../depthai_ctrl ../bin/
-          ./generate_deb.sh ../depthai_ctrl ../bin/ ../depthai_ctrl/host/
+          ./generate_deb.sh ../depthai_ctrl ../bin/ host
           popd
 
       - name: Install jfrog CLI tool
