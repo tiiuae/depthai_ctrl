@@ -699,9 +699,14 @@ class DepthAICamCtrl : public rclcpp::Node
             address_desc.description = "Video stream destination address. The Gstreamer pipeline is generated " \
                                     "based on this address.";
             address_desc.additional_constraints = "UDP or RTSP addresses are accepted. For example:\n" \
-                                                "\tudp://<ip_address>:<port> (default)\n" \
-                                                "\trtsp://<user>:<key>@<ip_address>:<port>/<path>";
-            this->declare_parameter<std::string>("address", "udp://127.0.0.1:5600", address_desc);
+                                                "\trtsp://<user>:<key>@<ip_address>:<port>/<path> (default)\n" \
+                                                "\tudp://<ip_address>:<port>";
+            std::string stream_path = "rtsp://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@35.241.138.213:8554";
+            std::string ns = std::string(this->get_namespace());
+            this->declare_parameter<std::string>("address",
+                                                stream_path + ns,
+                                                address_desc);
+            RCLCPP_INFO(this->get_logger(), "Namespace: %s", (stream_path + ns).c_str());
 
             mStreamAddress = this->get_parameter("address").as_string();
 
