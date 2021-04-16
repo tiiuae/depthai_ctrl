@@ -11,7 +11,7 @@ Package: @(Package)
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, @(', '.join(Depends)),
  gstreamer1.0-plugins-bad, libgstreamer1.0-0, gstreamer1.0-libav,
- gir1.2-gst-rtsp-server-1.0
+ gir1.2-gst-rtsp-server-1.0, gstreamer1.0-rtsp
 @[if Conflicts]Conflicts: @(', '.join(Conflicts))@\n@[end if]@
 @[if Replaces]Replaces: @(', '.join(Replaces))@\n@[end if]@
 Description: @(Description)
