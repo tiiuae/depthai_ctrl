@@ -52,6 +52,7 @@ jobs:
           DISTRIBUTION: focal
           COMPONENT: fog-sw
           ARCHITECTURE: amd64
+          BUILD_NAME: depthai-ctrl
           CI: true
         if: github.event_name == 'push'
         run: |
@@ -61,10 +62,20 @@ jobs:
           pkg=$(find bin -name 'ros-foxy-depthai-ctrl*.deb')
           jfrog rt u --deb "$DISTRIBUTION/$COMPONENT/$ARCHITECTURE" \
                      --target-props COMMIT="$GITHUB_SHA" \
+                     --build-name "$BUILD_NAME" \
+                     --build-number "$GITHUB_SHA" \
+                     --module ros-foxy-depthai-ctrl \
                      "$pkg" \
                      "$ARTIFACTORY_REPO"
           pkg=$(find bin -name 'depthai-ctrl-host*.deb')
           jfrog rt u --deb "$DISTRIBUTION/$COMPONENT/$ARCHITECTURE" \
                      --target-props COMMIT="$GITHUB_SHA" \
+                     --build-name "$BUILD_NAME" \
+                     --build-number "$GITHUB_SHA" \
+                     --module depthai-ctrl-host \
                      "$pkg" \
                      "$ARTIFACTORY_REPO"
+          jfrog rt build-publish "$BUILD_NAME" "$GITHUB_SHA"
+          jfrog rt bpr "$BUILD_NAME" "$GITHUB_SHA" "$ARTIFACTORY_REPO" \
+                       --status dev \
+                       --comment "development build"
