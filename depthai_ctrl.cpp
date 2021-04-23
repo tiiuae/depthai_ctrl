@@ -670,7 +670,7 @@ class DepthAICamCtrl : public rclcpp::Node
         : Node("depthai_cam_ctrl"), mDepthAIGst(nullptr)
         {
             subscription_ = this->create_subscription<std_msgs::msg::String>(
-                "videostreamcmd", 10, std::bind(&DepthAICamCtrl::depthai_rgb_cam_cmd_cb,
+                "videostreamcmd", rclcpp::SystemDefaultsQoS(), std::bind(&DepthAICamCtrl::depthai_rgb_cam_cmd_cb,
                 this, _1));
             if (depthAIGst != nullptr) {
                 mDepthAIGst = depthAIGst;
