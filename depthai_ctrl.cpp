@@ -410,17 +410,24 @@ class DepthAIGst
                     "framerate", GST_TYPE_FRACTION, mEncoderFps, 1,
                     NULL), NULL);
 
+            mH26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
+            g_object_set(G_OBJECT(mH26xEncFilter), "caps",
+                gst_caps_new_simple(gstFormat.c_str(),
+                    "profile", G_TYPE_STRING, "main",
+                    "stream-format", G_TYPE_STRING, "byte-stream",
+                    NULL), NULL);
+
             mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
             mBusWatchId = gst_bus_add_watch(mBus, StreamEventCallBack, this);
             gst_object_unref(mBus);
             mBus = nullptr;
             
             if (is_udp_protocol) {
-                gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
-                gst_element_link_many(mAppsrc, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
+                gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
+                gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
             } else {
-                gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xparse, mQueue1, mRtspSink, NULL);
-                gst_element_link_many(mAppsrc, mH26xparse, mQueue1, mRtspSink, NULL);
+                gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
+                gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
             }
 
             mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGst::PlayStream, this);
@@ -671,21 +678,31 @@ class DepthAIGst
                 g_printerr("Debugging info: %s\n", (errDebug) ? errDebug : "none");
                 if (error->code == G_FILE_ERROR_NODEV &&
                    g_strrstr(error->message, "Could not open resource for reading and writing")) {
+                    GstFlowReturn ret;
+                    if (depthAIGst->mNeedDataSignalId != 0) {
+                        g_signal_handler_disconnect(depthAIGst->mAppsrc, depthAIGst->mNeedDataSignalId);
+                    }
+                    if (depthAIGst->mAppsrc != nullptr) {
+                        g_signal_emit_by_name(depthAIGst->mAppsrc, "end-of-stream", &ret);
+                        if (ret != GST_FLOW_OK) {
+                            g_printerr("Error: Emit end-of-stream failed\n");
+                        }
+                    }
                     if (depthAIGst->mPipeline != nullptr) {
                         gst_element_set_state(depthAIGst->mPipeline, GST_STATE_NULL);
                     }
                     depthAIGst->mIsStreamPlaying = false;
+                    // Restart stream after two seconds.
+                    source = g_timeout_source_new(2000);
+                    g_source_set_callback(source,
+                        DepthAIGst::StreamPlayingRestartCallback,
+                        depthAIGst,
+                        DepthAIGst::StreamPlayingRestartDone);
+                    g_source_attach(source, depthAIGst->mLoopContext);
+                    g_source_unref(source);
                 }
                 g_error_free(error);
                 g_free(errDebug);
-                // Restart stream after two seconds.
-                source = g_timeout_source_new(2000);
-                g_source_set_callback(source,
-                    DepthAIGst::StreamPlayingRestartCallback,
-                    depthAIGst,
-                    DepthAIGst::StreamPlayingRestartDone);
-                g_source_attach(source, depthAIGst->mLoopContext);
-                g_source_unref(source);
                 break;
 
             default:
@@ -714,8 +731,7 @@ class DepthAIGst
 
             g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);
             gst_buffer_unref(buffer);
-            if (ret != GST_FLOW_OK) {
-                /* something wrong, stop pushing */
+            if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
                 g_main_loop_quit(depthAIGst->mLoop);
             }
         }
@@ -725,6 +741,11 @@ class DepthAIGst
             DepthAIGst *depthAIGst = (DepthAIGst *)user_data;
 
             g_debug("Restart stream because of connection failed.\n");
+            if (depthAIGst->mAppsrc) {
+                depthAIGst->mNeedDataSignalId = g_signal_connect(
+                    depthAIGst->mAppsrc,"need-data",
+                    G_CALLBACK(NeedDataCallBack), depthAIGst);
+            }
             gst_element_set_state(depthAIGst->mPipeline, GST_STATE_PLAYING);
 
             return G_SOURCE_REMOVE;
