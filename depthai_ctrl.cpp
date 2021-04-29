@@ -26,16 +26,17 @@ using std::placeholders::_1;
 
 #define DEPTHAI_CTRL_VER_MAJOR 0
 #define DEPTHAI_CTRL_VER_MINOR 5
-// The CI build will add a build number after the minor version.
+#define DEPTHAI_CTRL_VER_PATCH 1
 
-#define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 100 + DEPTHAI_CTRL_VER_MINOR)
+#define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 10000 + DEPTHAI_CTRL_VER_MINOR * 100 + DEPTHAI_CTRL_VER_PATCH)
 
 
 class DepthAICam
 {
     public:
-        DepthAICam() : device(nullptr), mIsDeviceAvailable(true), mEncoderWidth(1280),
-                       mEncoderHeight(720), mEncoderFps(25), mEncoderBitrate(3000000),
+        DepthAICam() : device(nullptr), encColorOutput(nullptr), mIsDeviceAvailable(true),
+                       mEncoderWidth(1280), mEncoderHeight(720), mEncoderFps(25),
+                       mEncoderBitrate(3000000),
                        mEncoderProfile(dai::VideoEncoderProperties::Profile::H264_MAIN)
         {
             try {
@@ -55,28 +56,34 @@ class DepthAICam
 
         void StartStreaming(void)
         {
-            if (mIsDeviceAvailable) {
-                if (device != nullptr) {
-                    delete(device);
-                }
-                BuildPipeline();
-                try {
-                    device = new dai::Device(mPipeline, true);
-                } catch (const std::runtime_error& err) {
-                    std::cout << "DepthAI runtime error: " << err.what() << std::endl;
-                    mIsDeviceAvailable = false;
-                    return;
-                }
-                device->startPipeline();
-
-                encColorOutput = device->getOutputQueue("enc26xColor", 30, true);
-                colorCamInput = device->getInputQueue("colorCamCtrl");
-
-                dai::CameraControl colorCamCtrl;
-                colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::AUTO);
-                //colorCamCtrl.setManualFocus(255);
-                colorCamInput->send(colorCamCtrl);
+            if (!mIsDeviceAvailable) {
+                return;
             }
+            if (encColorOutput != nullptr) {
+                // Pipeline started.
+                // TODO: check if DepthAI API has a better way to check this.
+                return;
+            }
+            if (device != nullptr) {
+                delete(device);
+            }
+            BuildPipeline();
+            try {
+                device = new dai::Device(mPipeline, true);
+            } catch (const std::runtime_error& err) {
+                std::cout << "DepthAI runtime error: " << err.what() << std::endl;
+                mIsDeviceAvailable = false;
+                return;
+            }
+            device->startPipeline();
+
+            encColorOutput = device->getOutputQueue("enc26xColor", 30, true);
+            colorCamInput = device->getInputQueue("colorCamCtrl");
+
+            dai::CameraControl colorCamCtrl;
+            colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::AUTO);
+            //colorCamCtrl.setManualFocus(255);
+            colorCamInput->send(colorCamCtrl);
         }
 
         std::shared_ptr<dai::ImgFrame> GetFrame(void)
@@ -206,11 +213,12 @@ class DepthAIGst
                                             mEncoderHeight(720), mEncoderFps(25), mEncoderBitrate(3000000),
                                             mEncoderProfile("H264"), mGstTimestamp(0), mTestSrc(nullptr),
                                             mTextOverlay(nullptr), mH26xEnc(nullptr), mTestSrcFilter(nullptr),
-                                            mH26xEncFilter(nullptr)
+                                            mH26xEncFilter(nullptr), mStreamPlayingCheckTimerId(0)
         {
             mStreamAddress = "";
             gst_init(&argc, &argv);
-            mLoop = g_main_loop_new(NULL, false);
+            mLoopContext = g_main_context_default();
+            mLoop = g_main_loop_new(mLoopContext, false);
             depthAICam = new DepthAICam();
         }
 
@@ -239,6 +247,7 @@ class DepthAIGst
             }
             if (mBusWatchId != 0) {
                 g_source_remove(mBusWatchId);
+                mBusWatchId = 0;
             }
         }
 
@@ -337,8 +346,6 @@ class DepthAIGst
             }
 
             mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGst::PlayStream, this);
-
-            mIsStreamPlaying = true;
         }
 
         void CreatePipeLine(void)
@@ -403,23 +410,29 @@ class DepthAIGst
                     "framerate", GST_TYPE_FRACTION, mEncoderFps, 1,
                     NULL), NULL);
 
+            mH26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
+            g_object_set(G_OBJECT(mH26xEncFilter), "caps",
+                gst_caps_new_simple(gstFormat.c_str(),
+                    "profile", G_TYPE_STRING, "main",
+                    "stream-format", G_TYPE_STRING, "byte-stream",
+                    NULL), NULL);
+
             mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
             mBusWatchId = gst_bus_add_watch(mBus, StreamEventCallBack, this);
             gst_object_unref(mBus);
             mBus = nullptr;
             
             if (is_udp_protocol) {
-                gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
-                gst_element_link_many(mAppsrc, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
+                gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
+                gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
             } else {
-                gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xparse, mQueue1, mRtspSink, NULL);
-                gst_element_link_many(mAppsrc, mH26xparse, mQueue1, mRtspSink, NULL);
+                gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
+                gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
             }
 
             mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGst::PlayStream, this);
 
             mNeedDataSignalId = g_signal_connect(mAppsrc, "need-data", G_CALLBACK(NeedDataCallBack), this);
-            mIsStreamPlaying = true;
         }
 
         void StopStream(void)
@@ -517,6 +530,12 @@ class DepthAIGst
         void SetStreamAddress(const std::string address)
         {
             mStreamAddress = address;
+            if (mRtspSink) {
+                g_object_set(G_OBJECT(mRtspSink),
+                    "protocols", 4, // 4 = tcp
+                    "location", mStreamAddress.c_str(),
+                    NULL);
+            }
         }
 
         DepthAICam *depthAICam;
@@ -531,22 +550,100 @@ class DepthAIGst
             }
             gst_element_set_state(depthAIGst->mPipeline, GST_STATE_PLAYING);
             g_main_loop_run(depthAIGst->mLoop);
-            g_thread_exit(0);
+            g_thread_exit(depthAIGst->mLoopThread);
 
             return nullptr;
+        }
+
+        static gboolean gst_is_missing_plugin_message(GstMessage *msg)
+        {
+            if (GST_MESSAGE_TYPE (msg) != GST_MESSAGE_ELEMENT
+              || gst_message_get_structure (msg) == NULL)
+                return FALSE;
+
+            return gst_structure_has_name(gst_message_get_structure(msg), "missing-plugin");
+        }
+
+        static const gchar *gst_missing_plugin_message_get_description(GstMessage *msg)
+        {
+            return gst_structure_get_string(gst_message_get_structure(msg), "name");
         }
 
         static gboolean StreamEventCallBack(GstBus *bus, GstMessage *message, gpointer data)
         {
             (void)bus;
-            g_print("%s: Got %s message\n", __FUNCTION__, GST_MESSAGE_TYPE_NAME(message));
+            g_debug("%s: Got %s message\n", __FUNCTION__, GST_MESSAGE_TYPE_NAME(message));
  
             DepthAIGst *depthAIGst = (DepthAIGst *)data;
             GstTagList *list = nullptr;
 
             switch (GST_MESSAGE_TYPE (message)) {
+            case GST_MESSAGE_STREAM_STATUS:
+                GstStreamStatusType statusType;
+                GstElement *element;
+
+                gst_message_parse_stream_status(message, &statusType, &element);
+                g_print("Element %s stream status type %d.\n",
+                    GST_OBJECT_NAME(message->src),
+                    statusType);
+                break;
+
+            case GST_MESSAGE_PROGRESS:
+                GstProgressType progressType;
+                gchar *code, *text;
+
+                gst_message_parse_progress (message, &progressType, &code, &text);
+                switch (progressType) {
+                    case GST_PROGRESS_TYPE_START:
+                    case GST_PROGRESS_TYPE_CONTINUE:
+                    case GST_PROGRESS_TYPE_COMPLETE:
+                    case GST_PROGRESS_TYPE_CANCELED:
+                    case GST_PROGRESS_TYPE_ERROR:
+                    default:
+                        break;
+                }
+                g_print("Progress: (%s) %s\n", code, text);
+                g_free(code);
+                g_free(text);
+                break;
+
+            case GST_MESSAGE_NEW_CLOCK:
+                GstClock *clock;
+
+                gst_message_parse_new_clock(message, &clock);
+                g_print("New clock: %s\n", (clock ? GST_OBJECT_NAME(clock) : "NULL"));
+                break;
+
+            case GST_MESSAGE_LATENCY:
+                g_print("Redistribute latency...\n");
+                gst_bin_recalculate_latency(GST_BIN(depthAIGst->mPipeline));
+                break;
+
+            case GST_MESSAGE_ELEMENT:
+                if (gst_is_missing_plugin_message(message)) {
+                    const gchar *desc;
+
+                    desc = gst_missing_plugin_message_get_description(message);
+                    g_print("Missing element: %s\n", desc ? desc : "(no description)");
+                }
+                break;
+
+            case GST_MESSAGE_STATE_CHANGED:
+                GstState old_state, new_state;
+
+                gst_message_parse_state_changed(message, &old_state, &new_state, NULL);
+                g_print("Element %s changed state from %s to %s.\n",
+                    GST_OBJECT_NAME(message->src),
+                    gst_element_state_get_name(old_state),
+                    gst_element_state_get_name(new_state));
+                if (g_strrstr(GST_OBJECT_NAME(message->src), "rtspbin")
+                      && new_state == GST_STATE_PLAYING) {
+                    depthAIGst->mIsStreamPlaying = true;
+                }
+                break;
+
             case GST_MESSAGE_EOS:
-                g_print("End of stream\n");
+                g_print("End of stream.\n");
                 g_main_loop_quit(depthAIGst->mLoop);
                 break;
 
@@ -555,7 +652,7 @@ class DepthAIGst
 
                 gst_message_parse_tag(message, &list);
 
-                g_printerr("Tag: %s\n", gst_tag_list_to_string(list));
+                g_print("Tag: %s.\n", gst_tag_list_to_string(list));
                 gst_tag_list_unref(list);
                 break;
 
@@ -566,21 +663,46 @@ class DepthAIGst
                 gst_message_parse_warning(message, &warning, &warnDebug);
                 g_free(warnDebug);
 
-                g_printerr("Warning: %s\n", warning->message);
+                g_warning("Warning: %s.\n", warning->message);
                 g_error_free(warning);
                 break;
 
             case GST_MESSAGE_ERROR:
                 gchar  *errDebug;
                 GError *error;
+                GSource *source;
 
                 gst_message_parse_error(message, &error, &errDebug);
-                g_free(errDebug);
-
-                g_printerr("Error: %s\n", error->message);
+                g_printerr("ERROR from element %s: %s\n",
+                    GST_OBJECT_NAME(message->src), error->message);
+                g_printerr("Debugging info: %s\n", (errDebug) ? errDebug : "none");
+                if (error->code == G_FILE_ERROR_NODEV &&
+                   g_strrstr(error->message, "Could not open resource for reading and writing")) {
+                    GstFlowReturn ret;
+                    if (depthAIGst->mNeedDataSignalId != 0) {
+                        g_signal_handler_disconnect(depthAIGst->mAppsrc, depthAIGst->mNeedDataSignalId);
+                    }
+                    if (depthAIGst->mAppsrc != nullptr) {
+                        g_signal_emit_by_name(depthAIGst->mAppsrc, "end-of-stream", &ret);
+                        if (ret != GST_FLOW_OK) {
+                            g_printerr("Error: Emit end-of-stream failed\n");
+                        }
+                    }
+                    if (depthAIGst->mPipeline != nullptr) {
+                        gst_element_set_state(depthAIGst->mPipeline, GST_STATE_NULL);
+                    }
+                    depthAIGst->mIsStreamPlaying = false;
+                    // Restart stream after two seconds.
+                    source = g_timeout_source_new(2000);
+                    g_source_set_callback(source,
+                        DepthAIGst::StreamPlayingRestartCallback,
+                        depthAIGst,
+                        DepthAIGst::StreamPlayingRestartDone);
+                    g_source_attach(source, depthAIGst->mLoopContext);
+                    g_source_unref(source);
+                }
                 g_error_free(error);
-
-                g_main_loop_quit(depthAIGst->mLoop);
+                g_free(errDebug);
                 break;
 
             default:
@@ -609,10 +731,30 @@ class DepthAIGst
 
             g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);
             gst_buffer_unref(buffer);
-            if (ret != GST_FLOW_OK) {
-                /* something wrong, stop pushing */
+            if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
                 g_main_loop_quit(depthAIGst->mLoop);
             }
+        }
+
+        static gboolean StreamPlayingRestartCallback(gpointer user_data)
+        {
+            DepthAIGst *depthAIGst = (DepthAIGst *)user_data;
+
+            g_debug("Restart stream because of connection failed.\n");
+            if (depthAIGst->mAppsrc) {
+                depthAIGst->mNeedDataSignalId = g_signal_connect(
+                    depthAIGst->mAppsrc,"need-data",
+                    G_CALLBACK(NeedDataCallBack), depthAIGst);
+            }
+            gst_element_set_state(depthAIGst->mPipeline, GST_STATE_PLAYING);
+
+            return G_SOURCE_REMOVE;
+        }
+
+        // Use this function to execute code when timer is removed.
+        static void StreamPlayingRestartDone(gpointer user_data)
+        {
+            (void)user_data;
         }
 
     private:
@@ -660,6 +802,8 @@ class DepthAIGst
         GstElement *mH26xEnc;
         GstElement *mTestSrcFilter;
         GstElement *mH26xEncFilter;
+        guint mStreamPlayingCheckTimerId;
+        GMainContext *mLoopContext;
 };
 
 
@@ -706,7 +850,7 @@ class DepthAICamCtrl : public rclcpp::Node
             this->declare_parameter<std::string>("address",
                                                 stream_path + ns,
                                                 address_desc);
-            RCLCPP_INFO(this->get_logger(), "Namespace: %s", (stream_path + ns).c_str());
+            RCLCPP_DEBUG(this->get_logger(), "Namespace: %s", (stream_path + ns).c_str());
 
             mStreamAddress = this->get_parameter("address").as_string();
 
@@ -854,12 +998,18 @@ class DepthAICamCtrl : public rclcpp::Node
                 }
 
                 if (parameter.get_name() == "address") {
+                    if (mDepthAIGst->IsStreamPlaying()) {
+                        result.successful = false;
+                        result.reason = "Cannot change stream address while stream is playing.";
+                        return result;
+                    }
                     std::string addr = parameter.as_string();
                     ValidateAddressParameters(addr, result);
                     if (!result.successful) {
                         return result;
                     }
                     mStreamAddress = addr;
+                    mDepthAIGst->SetStreamAddress(mStreamAddress);
                 }
             }
             return result;
