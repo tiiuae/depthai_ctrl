@@ -10,4 +10,7 @@ EOF
 
 chmod 644 /etc/udev/rules.d/80-movidius.rules
 
+/usr/bin/udevadm control --reload-rules
+/usr/bin/udevadm trigger
+
 exit 0
