@@ -26,7 +26,7 @@ using std::placeholders::_1;
 
 #define DEPTHAI_CTRL_VER_MAJOR 0
 #define DEPTHAI_CTRL_VER_MINOR 5
-#define DEPTHAI_CTRL_VER_PATCH 2
+#define DEPTHAI_CTRL_VER_PATCH 3
 
 #define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 10000 + DEPTHAI_CTRL_VER_MINOR * 100 + DEPTHAI_CTRL_VER_PATCH)
 
@@ -845,7 +845,7 @@ class DepthAICamCtrl : public rclcpp::Node
             address_desc.additional_constraints = "UDP or RTSP addresses are accepted. For example:\n" \
                                                 "\trtsp://<user>:<key>@<ip_address>:<port>/<path> (default)\n" \
                                                 "\tudp://<ip_address>:<port>";
-            std::string stream_path = "rtsp://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@35.241.138.213:8554";
+            std::string stream_path = "rtsp://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@35.187.169.6:8554";
             std::string ns = std::string(this->get_namespace());
             this->declare_parameter<std::string>("address",
                                                 stream_path + ns,
