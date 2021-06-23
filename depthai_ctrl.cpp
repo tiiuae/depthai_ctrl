@@ -26,7 +26,7 @@ using std::placeholders::_1;
 
 #define DEPTHAI_CTRL_VER_MAJOR 0
 #define DEPTHAI_CTRL_VER_MINOR 5
-#define DEPTHAI_CTRL_VER_PATCH 4
+#define DEPTHAI_CTRL_VER_PATCH 5
 
 #define DEPTHAI_CTRL_VERSION (DEPTHAI_CTRL_VER_MAJOR * 10000 + DEPTHAI_CTRL_VER_MINOR * 100 + DEPTHAI_CTRL_VER_PATCH)
 
@@ -289,11 +289,6 @@ class DepthAIGst
                 mH26xparse = gst_element_factory_make("h265parse", "parser");
             } else {
                 mH26xEnc = gst_element_factory_make("x264enc", "encoder");
-                g_object_set(G_OBJECT(mH26xEnc),
-                    "pass", 0, // cbr
-                    "bitrate", 500, // 500 kbit/sec
-                    "tune", 4, // 4 = zerolatency
-                    NULL);
                 mH26xparse = gst_element_factory_make("h264parse", "parser");
             }
 
@@ -329,8 +324,14 @@ class DepthAIGst
             mH26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
             g_object_set(G_OBJECT(mH26xEncFilter), "caps",
                 gst_caps_new_simple(gstFormat.c_str(),
-                    "profile", G_TYPE_STRING, "main",
-                    "stream-format", G_TYPE_STRING, "byte-stream",
+                    "profile", G_TYPE_STRING, "baseline",
+                    "pass", G_TYPE_INT, 5,
+                    "trellis", G_TYPE_BOOLEAN, false,
+                    "tune", G_TYPE_STRING, "zero-latency",
+                    "threads", G_TYPE_INT, 0,
+                    "speed-preset", G_TYPE_STRING, "superfast",
+                    "subme", G_TYPE_INT, 1,
+                    "bitrate", G_TYPE_INT, 4000,
                     NULL), NULL);
 
             mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
