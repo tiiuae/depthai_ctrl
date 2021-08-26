@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.5)
 
 # all these settings are needed to properly compile depthai-core as subdirectory
-set(BUILD_SHARED_LIBS OFF)
+set(BUILD_SHARED_LIBS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-#add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
-#add_definitions(-DSPDLOG_HEADER_ONLY=1)
-#add_definitions(-DFMT_HEADER_ONLY=1)
+add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
+add_definitions(-DSPDLOG_HEADER_ONLY=1)
+add_definitions(-DFMT_HEADER_ONLY=1)
 set(HUNTER_CONFIGURATION_TYPES ${CMAKE_BUILD_TYPE}) # makes possible to compile also Debug build
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core ${CMAKE_CURRENT_BINARY_DIR}/depthai-core EXCLUDE_FROM_ALL)
 

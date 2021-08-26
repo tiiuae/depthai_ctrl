@@ -41,31 +41,6 @@ class DepthAiGStreamer : public rclcpp::Node
 
     bool IsStreamPlaying() { return mIsStreamPlaying; }
 
-//    void SetEncoderWidth(int width);
-//
-//    int GetEncoderWidth() { return mEncoderWidth; }
-//
-//    void SetEncoderHeight(int height);
-//
-//    int GetEncoderHeight() { return mEncoderHeight; }
-//
-//    void SetEncoderFps(int fps);
-//
-//    int GetEncoderFps() { return mEncoderFps; }
-//
-//    void SetEncoderBitrate(int bitrate)
-//    {
-//        mEncoderBitrate = bitrate;
-//    }
-//
-//    int GetEncoderBitrate() { return mEncoderBitrate; }
-//
-//    void SetEncoderProfile(std::string profile);
-//
-//    const std::string& GetEncoderProfile() { return mEncoderProfile; }
-//
-//    void SetStreamAddress(const std::string address);
-
   protected:
 
     static void* gst_PlayStream(gpointer data);
@@ -92,7 +67,7 @@ class DepthAiGStreamer : public rclcpp::Node
 
     bool IsVideoStreamAvailable()
     {
-        return _video_subscriber->get_publisher_count() > 0;
+        return _video_subscriber->get_publisher_count() > 0 && !(_message_queue.empty());
     }
 
     std::string ReadIpAddresFromUdpAddress(void);

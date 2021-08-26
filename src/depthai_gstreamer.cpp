@@ -147,6 +147,11 @@ void DepthAiGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
 {
     std::lock_guard<std::mutex> lock(_message_queue_mutex);
     _message_queue.push(video_msg);
+    // When message queue is too big - start deleting old messages
+    if(_message_queue.size() > 100)
+    {
+        _message_queue.pop();
+    }
 }
 
 DepthAiGStreamer::~DepthAiGStreamer()
@@ -461,94 +466,7 @@ void DepthAiGStreamer::CreatePipeline(void)
 
     mNeedDataSignalId = g_signal_connect(mAppsrc, "need-data", G_CALLBACK(gst_NeedDataCallBack), this);
 }
-//
-//void DepthAiGStreamer::StopStream(void)
-//{
-//    GstFlowReturn ret;
-//
-//    if (mNeedDataSignalId != 0)
-//    {
-//        g_signal_handler_disconnect(mAppsrc, mNeedDataSignalId);
-//    }
-//    if (mAppsrc != nullptr)
-//    {
-//        g_signal_emit_by_name(mAppsrc, "end-of-stream", &ret);
-//        if (ret != GST_FLOW_OK)
-//        {
-//            g_printerr("Error: Emit end-of-stream failed\n");
-//        }
-//    }
-//    if (mPipeline != nullptr)
-//    {
-//        gst_element_set_state(mPipeline, GST_STATE_NULL);
-//    }
-//    if (mLoop != nullptr)
-//    {
-//        g_main_loop_quit(mLoop);
-//    }
-//    if (mLoopThread != nullptr)
-//    {
-//        g_thread_join(mLoopThread);
-//    }
-//    mIsStreamPlaying = false;
-//}
-//
-//
-//void DepthAiGStreamer::SetEncoderWidth(int width)
-//{
-//    if (width > 4096)
-//    {
-//        g_printerr("Width must be smaller than 4096 for H26x encoder profile.\n");
-//        return;
-//    }
-//    if (width % 8 != 0)
-//    {
-//        g_printerr("Width must be multiple of 8 for H26x encoder profile.\n");
-//        return;
-//    }
-//    mEncoderWidth = width;
-//    //depthAICam->SetEncoderWidth(mEncoderWidth);
-//}
-//
-//void DepthAiGStreamer::SetEncoderHeight(int height)
-//{
-//    if (height > 4096)
-//    {
-//        g_printerr("Height must be smaller than 4096 for H26x encoder profile.\n");
-//        return;
-//    }
-//    if (height % 8 != 0)
-//    {
-//        g_printerr("Height must be multiple of 8 for H26x encoder profile.\n");
-//        return;
-//    }
-//    mEncoderHeight = height;
-//    //depthAICam->SetEncoderHeight(mEncoderHeight);
-//}
-//
-//void DepthAiGStreamer::SetEncoderFps(int fps)
-//{
-//    if (fps > 60)
-//    {
-//        g_printerr("Too high frames per second.\n");
-//        return;
-//    }
-//    mEncoderFps = fps;
-//    //depthAICam->SetEncoderFps(mEncoderFps);
-//}
-//
-//void DepthAiGStreamer::SetEncoderProfile(std::string profile)
-//{
-//    std::transform(profile.begin(), profile.end(), profile.begin(), ::toupper);
-//    if (profile != "H264" && profile != "H265")
-//    {
-//        g_printerr("Not valid H26x profile.\n");
-//        return;
-//    }
-//    mEncoderProfile = profile;
-//    //depthAICam->SetEncoderProfile(mEncoderProfile);
-//}
-//
+
 //void DepthAiGStreamer::SetStreamAddress(const std::string address)
 //{
 //    mStreamAddress = address;
@@ -567,11 +485,6 @@ void DepthAiGStreamer::CreatePipeline(void)
 void* DepthAiGStreamer::gst_PlayStream(gpointer data)
 {
     auto depthAIGst = static_cast<DepthAiGStreamer*>(data);
-//    CameraNode* depthAICam = depthAIGst->depthAICam;
-//    if (depthAICam != nullptr)
-//    {
-//        depthAICam->StartStreaming();
-//    }
     gst_element_set_state(depthAIGst->mPipeline, GST_STATE_PLAYING);
     g_main_loop_run(depthAIGst->mLoop);
     g_thread_exit(depthAIGst->mLoopThread);
