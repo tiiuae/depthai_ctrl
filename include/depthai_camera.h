@@ -116,6 +116,7 @@ class DepthAICamera : public rclcpp::Node
             RCLCPP_ERROR(this->get_logger(), "[%s]: Required video stream parameter 'encoding' is incorrect.", this->get_name());
             return false;
         }
+        return true;
     }
 
 
