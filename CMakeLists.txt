@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # all these settings are needed to properly compile depthai-core as subdirectory
-set(BUILD_SHARED_LIBS ON)
+set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
 add_definitions(-DSPDLOG_HEADER_ONLY=1)
@@ -47,7 +47,7 @@ link_directories(${GST_LIBRARY_DIRS})
 # DepthAI Camera as Component library
 add_library(depthai_camera SHARED src/depthai_camera.cpp)
 ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs)
-target_link_libraries(depthai_camera PUBLIC depthai-core spdlog)
+target_link_libraries(depthai_camera PUBLIC depthai-core)
 
 
 # DepthAI Camera as separate node
@@ -64,8 +64,8 @@ target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES})
 
 # DepthAI GStreamer as separate node
 add_executable(gstreamer_node src/gstreamer_node.cpp)
-ament_target_dependencies(gstreamer_node PUBLIC rclcpp_components)
-target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer )
+ament_target_dependencies(gstreamer_node PUBLIC rclcpp rclcpp_components)
+target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
 
 rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
 rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)

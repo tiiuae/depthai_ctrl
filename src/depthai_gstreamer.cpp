@@ -3,7 +3,7 @@
 using namespace depthai_ctrl;
 using std::placeholders::_1;
 
-DepthAiGStreamer::DepthAiGStreamer(int argc, char* argv[])
+DepthAIGStreamer::DepthAIGStreamer(int argc, char* argv[])
     : Node("depthai_gstreamer"),
       mIsStreamPlaying(false),
       mEncoderWidth(1280),
@@ -36,7 +36,7 @@ DepthAiGStreamer::DepthAiGStreamer(int argc, char* argv[])
     Initialize();
 }
 
-DepthAiGStreamer::DepthAiGStreamer(const rclcpp::NodeOptions & options)
+DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions& options)
     : Node("depthai_gstreamer", options),
       mIsStreamPlaying(false),
       mEncoderWidth(1280),
@@ -65,28 +65,27 @@ DepthAiGStreamer::DepthAiGStreamer(const rclcpp::NodeOptions & options)
       mStreamPlayingCheckTimerId(0),
       mLoopContext(nullptr)
 {
-    char* argv[] = {""};
-    int argc = 1;
-    gst_init(&argc, reinterpret_cast<char***>(&argv));
+    gst_init(0, nullptr);
+    Initialize();
 }
 
-void DepthAiGStreamer::Initialize()
+void DepthAIGStreamer::Initialize()
 {
-    declare_parameter<std::string>("address", "rtsp://127.0.0.1:8554/mystream");
-    mStreamAddress = this->get_parameter("address").as_string();
-
     mLoopContext = g_main_context_default();
     mLoop = g_main_loop_new(mLoopContext, false);
 
     declare_parameter<std::string>("video_stream_topic", "camera/color/video");
 
     const std::string video_stream_topic = get_parameter("video_stream_topic").as_string();
-    _video_subscriber = create_subscription<CompressedImageMsg>(video_stream_topic, rclcpp::SystemDefaultsQoS(), std::bind(&DepthAiGStreamer::GrabVideoMsg, this, std::placeholders::_1));
+    _video_subscriber = create_subscription<CompressedImageMsg>(
+        video_stream_topic,
+        rclcpp::SystemDefaultsQoS(),
+        std::bind(&DepthAIGStreamer::GrabVideoMsg, this, std::placeholders::_1));
 
     _video_stream_command_subscriber = this->create_subscription<std_msgs::msg::String>(
         "videostreamcmd",
         rclcpp::SystemDefaultsQoS(),
-        std::bind(&DepthAiGStreamer::VideoStreamCommand, this, std::placeholders::_1));
+        std::bind(&DepthAIGStreamer::VideoStreamCommand, this, std::placeholders::_1));
 
     rcl_interfaces::msg::ParameterDescriptor encoding_desc;
     encoding_desc.name = "encoding";
@@ -122,12 +121,9 @@ void DepthAiGStreamer::Initialize()
         "\tudp://<ip_address>:<port>";
     std::string stream_path =
         "rtsps://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@video-stream.sacplatform.com:8555";
-    std::string ns = std::string(this->get_namespace());
+    std::string ns = std::string(get_namespace());
     declare_parameter<std::string>("address", stream_path + ns, address_desc);
-    RCLCPP_DEBUG(this->get_logger(), "Namespace: %s", (stream_path + ns).c_str());
-
-    _parameter_setter =
-        rclcpp::Node::add_on_set_parameters_callback(std::bind(&DepthAiGStreamer::SetParameters, this, _1));
+    RCLCPP_DEBUG(get_logger(), "Namespace: %s", (stream_path + ns).c_str());
 
     mEncoderWidth = get_parameter("width").as_int();
     mEncoderHeight = get_parameter("height").as_int();
@@ -138,23 +134,26 @@ void DepthAiGStreamer::Initialize()
 
     if (get_parameter("start_stream_on_boot").as_bool())
     {
-        RCLCPP_INFO(this->get_logger(), "Start DepthAI GStreamer video stream.");
+        RCLCPP_INFO(get_logger(), "Start DepthAI GStreamer video stream.");
         CreatePipeline();
     }
+
+    _parameter_setter =
+        rclcpp::Node::add_on_set_parameters_callback(std::bind(&DepthAIGStreamer::SetParameters, this, _1));
 }
 
-void DepthAiGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
+void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
     std::lock_guard<std::mutex> lock(_message_queue_mutex);
     _message_queue.push(video_msg);
     // When message queue is too big - start deleting old messages
-    if(_message_queue.size() > 100)
+    if (_message_queue.size() > 100)
     {
         _message_queue.pop();
     }
 }
 
-DepthAiGStreamer::~DepthAiGStreamer()
+DepthAIGStreamer::~DepthAIGStreamer()
 {
     DestroyPipeline();
     if (mLoop != nullptr)
@@ -164,7 +163,7 @@ DepthAiGStreamer::~DepthAiGStreamer()
     }
 }
 
-void DepthAiGStreamer::DestroyPipeline(void)
+void DepthAIGStreamer::DestroyPipeline(void)
 {
     if (mPipeline != nullptr)
     {
@@ -184,7 +183,7 @@ void DepthAiGStreamer::DestroyPipeline(void)
     }
 }
 
-void DepthAiGStreamer::BuildDefaultPipeline(void)
+void DepthAIGStreamer::BuildDefaultPipeline(void)
 {
     bool is_udp_protocol = (mStreamAddress.find("udp://") == 0);
 
@@ -350,10 +349,10 @@ void DepthAiGStreamer::BuildDefaultPipeline(void)
             mTestSrc, mTestSrcFilter, mTextOverlay, mH26xEnc, mH26xEncFilter, mH26xparse, mRtspSink, NULL);
     }
 
-    mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAiGStreamer::gst_PlayStream, this);
+    mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGStreamer::gst_PlayStream, this);
 }
 
-void DepthAiGStreamer::CreatePipeline(void)
+void DepthAIGStreamer::CreatePipeline(void)
 {
     if (!IsVideoStreamAvailable())
     {
@@ -434,17 +433,12 @@ void DepthAiGStreamer::CreatePipeline(void)
                  NULL);
 
     mH26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
-    g_object_set(G_OBJECT(mH26xEncFilter),
-                 "caps",
-                 gst_caps_new_simple(gstFormat.c_str(),
-                                     "profile",
-                                     G_TYPE_STRING,
-                                     "main",
-                                     "stream-format",
-                                     G_TYPE_STRING,
-                                     "byte-stream",
-                                     NULL),
-                 NULL);
+    g_object_set(
+        G_OBJECT(mH26xEncFilter),
+        "caps",
+        gst_caps_new_simple(
+            gstFormat.c_str(), "profile", G_TYPE_STRING, "main", "stream-format", G_TYPE_STRING, "byte-stream", NULL),
+        NULL);
 
     mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
     mBusWatchId = gst_bus_add_watch(mBus, gst_StreamEventCallBack, this);
@@ -453,8 +447,7 @@ void DepthAiGStreamer::CreatePipeline(void)
 
     if (is_udp_protocol)
     {
-        gst_bin_add_many(
-            GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
+        gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
         gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
     }
     else
@@ -462,12 +455,12 @@ void DepthAiGStreamer::CreatePipeline(void)
         gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
         gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
     }
-    mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAiGStreamer::gst_PlayStream, this);
+    mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGStreamer::gst_PlayStream, this);
 
     mNeedDataSignalId = g_signal_connect(mAppsrc, "need-data", G_CALLBACK(gst_NeedDataCallBack), this);
 }
 
-//void DepthAiGStreamer::SetStreamAddress(const std::string address)
+// void DepthAiGStreamer::SetStreamAddress(const std::string address)
 //{
 //    mStreamAddress = address;
 //    if (mRtspSink)
@@ -481,10 +474,9 @@ void DepthAiGStreamer::CreatePipeline(void)
 //    }
 //}
 
-
-void* DepthAiGStreamer::gst_PlayStream(gpointer data)
+void* DepthAIGStreamer::gst_PlayStream(gpointer data)
 {
-    auto depthAIGst = static_cast<DepthAiGStreamer*>(data);
+    auto depthAIGst = static_cast<DepthAIGStreamer*>(data);
     gst_element_set_state(depthAIGst->mPipeline, GST_STATE_PLAYING);
     g_main_loop_run(depthAIGst->mLoop);
     g_thread_exit(depthAIGst->mLoopThread);
@@ -492,7 +484,7 @@ void* DepthAiGStreamer::gst_PlayStream(gpointer data)
     return nullptr;
 }
 
-gboolean DepthAiGStreamer::gst_MissingPluginMessage(GstMessage* msg)
+gboolean DepthAIGStreamer::gst_MissingPluginMessage(GstMessage* msg)
 {
     if (GST_MESSAGE_TYPE(msg) != GST_MESSAGE_ELEMENT || gst_message_get_structure(msg) == NULL)
         return FALSE;
@@ -500,12 +492,12 @@ gboolean DepthAiGStreamer::gst_MissingPluginMessage(GstMessage* msg)
     return gst_structure_has_name(gst_message_get_structure(msg), "missing-plugin");
 }
 
-gboolean DepthAiGStreamer::gst_StreamEventCallBack(GstBus* bus, GstMessage* message, gpointer data)
+gboolean DepthAIGStreamer::gst_StreamEventCallBack(GstBus* bus, GstMessage* message, gpointer data)
 {
     (void)bus;
     g_debug("%s: Got %s message\n", __FUNCTION__, GST_MESSAGE_TYPE_NAME(message));
 
-    DepthAiGStreamer* depthAIGst = (DepthAiGStreamer*)data;
+    DepthAIGStreamer* depthAIGst = (DepthAIGStreamer*)data;
     GstTagList* list = nullptr;
 
     switch (GST_MESSAGE_TYPE(message))
@@ -631,9 +623,9 @@ gboolean DepthAiGStreamer::gst_StreamEventCallBack(GstBus* bus, GstMessage* mess
                 // Restart stream after two seconds.
                 source = g_timeout_source_new(2000);
                 g_source_set_callback(source,
-                                      DepthAiGStreamer::gst_StreamRestartCallback,
+                                      DepthAIGStreamer::gst_StreamRestartCallback,
                                       depthAIGst,
-                                      DepthAiGStreamer::StreamPlayingRestartDone);
+                                      DepthAIGStreamer::StreamPlayingRestartDone);
                 g_source_attach(source, depthAIGst->mLoopContext);
                 g_source_unref(source);
             }
@@ -648,20 +640,19 @@ gboolean DepthAiGStreamer::gst_StreamEventCallBack(GstBus* bus, GstMessage* mess
     return true;
 }
 
-void DepthAiGStreamer::gst_NeedDataCallBack(GstElement* appsrc, guint unused_size, gpointer user_data)
+void DepthAIGStreamer::gst_NeedDataCallBack(GstElement* appsrc, guint unused_size, gpointer user_data)
 {
     (void)unused_size;
     GstFlowReturn ret;
     GstBuffer* buffer;
-    auto depthAIGst = static_cast<DepthAiGStreamer*>(user_data);
-
+    auto depthAIGst = static_cast<DepthAIGStreamer*>(user_data);
 
     CompressedImageMsg::SharedPtr image;
-    while(!bool(image))
+    while (!bool(image))
     {
         std::cerr << "TRY TO GET SOME DATA!" << std::endl;
         depthAIGst->_message_queue_mutex.lock();
-        if(!depthAIGst->_message_queue.empty())
+        if (!depthAIGst->_message_queue.empty())
         {
             image = depthAIGst->_message_queue.back();
             depthAIGst->_message_queue.pop();
@@ -687,9 +678,9 @@ void DepthAiGStreamer::gst_NeedDataCallBack(GstElement* appsrc, guint unused_siz
     }
 }
 
-gboolean DepthAiGStreamer::gst_StreamRestartCallback(gpointer user_data)
+gboolean DepthAIGStreamer::gst_StreamRestartCallback(gpointer user_data)
 {
-    auto depthAIGst = static_cast<DepthAiGStreamer*>(user_data);
+    auto depthAIGst = static_cast<DepthAIGStreamer*>(user_data);
 
     g_debug("Restart stream because of connection failed.\n");
     if (depthAIGst->mAppsrc)
@@ -702,7 +693,7 @@ gboolean DepthAiGStreamer::gst_StreamRestartCallback(gpointer user_data)
     return G_SOURCE_REMOVE;
 }
 
-std::string DepthAiGStreamer::ReadIpAddresFromUdpAddress(void)
+std::string DepthAIGStreamer::ReadIpAddresFromUdpAddress(void)
 {
     // String format is: udp://<ip_addr>:<port>
     std::string addr = mStreamAddress;
@@ -712,7 +703,7 @@ std::string DepthAiGStreamer::ReadIpAddresFromUdpAddress(void)
     return addr.substr(0, addr.find(":"));
 }
 
-int DepthAiGStreamer::ReadPortFromUdpAddress(void)
+int DepthAIGStreamer::ReadPortFromUdpAddress(void)
 {
     // String format is: udp://<ip_addr>:<port>
     std::string addr = mStreamAddress;
@@ -722,7 +713,8 @@ int DepthAiGStreamer::ReadPortFromUdpAddress(void)
     return atoi(addr.substr(addr.find(":") + 1).c_str());
 }
 
-void DepthAiGStreamer::ValidateAddressParameters(const std::string address, rcl_interfaces::msg::SetParametersResult& res)
+void DepthAIGStreamer::ValidateAddressParameters(const std::string address,
+                                                 rcl_interfaces::msg::SetParametersResult& res)
 {
     std::string udp_protocol = "udp://";
     std::string rtsp_protocol = "rtsp://";
@@ -806,7 +798,8 @@ void DepthAiGStreamer::ValidateAddressParameters(const std::string address, rcl_
     }
 }
 
-rcl_interfaces::msg::SetParametersResult DepthAiGStreamer::SetParameters(const std::vector<rclcpp::Parameter>& parameters)
+rcl_interfaces::msg::SetParametersResult DepthAIGStreamer::SetParameters(
+    const std::vector<rclcpp::Parameter>& parameters)
 {
     rcl_interfaces::msg::SetParametersResult result;
     result.successful = true;
@@ -873,13 +866,12 @@ rcl_interfaces::msg::SetParametersResult DepthAiGStreamer::SetParameters(const s
                 return result;
             }
             mStreamAddress = addr;
-
         }
     }
     return result;
 }
 
-void DepthAiGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg)
+void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg)
 {
     RCLCPP_INFO(this->get_logger(), "Command to process: '%s'", msg->data.c_str());
     auto cmd = nlohmann::json::parse(msg->data.c_str());
@@ -926,7 +918,5 @@ void DepthAiGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
     }
 }
 
-
-
 #include <rclcpp_components/register_node_macro.hpp>
-RCLCPP_COMPONENTS_REGISTER_NODE(depthai_ctrl::DepthAiGStreamer)
+RCLCPP_COMPONENTS_REGISTER_NODE(depthai_ctrl::DepthAIGStreamer)

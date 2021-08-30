@@ -19,17 +19,17 @@ namespace depthai_ctrl
 {
 
 /// ROS2 Node, taking video stream coming from ROS2 messages and transmitting it to the specified RSTP/UDP address
-class DepthAiGStreamer : public rclcpp::Node
+class DepthAIGStreamer : public rclcpp::Node
 {
   public:
     using CompressedImageMsg = sensor_msgs::msg::CompressedImage;
 
-    DepthAiGStreamer(int argc, char* argv[]);
-    DepthAiGStreamer(const rclcpp::NodeOptions & options);
+    DepthAIGStreamer(int argc, char* argv[]);
+    DepthAIGStreamer(const rclcpp::NodeOptions & options);
 
     void GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg);
 
-    ~DepthAiGStreamer();
+    ~DepthAIGStreamer();
 
     void DestroyPipeline();
 

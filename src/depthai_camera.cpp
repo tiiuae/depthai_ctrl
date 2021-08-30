@@ -24,13 +24,12 @@ void DepthAICamera::Initialize()
     _right_publisher = create_publisher<ImageMsg>(right_camera_topic, rclcpp::SensorDataQoS());
     _color_publisher = create_publisher<ImageMsg>(color_camera_topic, rclcpp::SensorDataQoS());
     _video_publisher = create_publisher<CompressedImageMsg>(video_stream_topic, rclcpp::SystemDefaultsQoS());
-    _video_stream_command_subscriber = create_subscription<std_msgs::msg::String>(
-        video_stream_control_topic, rclcpp::SystemDefaultsQoS(), std::bind(&DepthAICamera::VideoStreamCommand, this, _1));
+    _video_stream_command_subscriber =
+        create_subscription<std_msgs::msg::String>(video_stream_control_topic,
+                                                   rclcpp::SystemDefaultsQoS(),
+                                                   std::bind(&DepthAICamera::VideoStreamCommand, this, _1));
 
-    // Video Encoding parameters
-    _parameters_setter =
-        rclcpp::Node::add_on_set_parameters_callback(std::bind(&DepthAICamera::SetParameters, this, _1));
-
+    // Video Stream parameters
     rcl_interfaces::msg::ParameterDescriptor encoding_desc;
     encoding_desc.name = "encoding";
     encoding_desc.type = rclcpp::PARAMETER_STRING;
@@ -46,6 +45,9 @@ void DepthAICamera::Initialize()
     _videoHeight = get_parameter("height").as_int();
     _videoFps = get_parameter("fps").as_int();
     _videoBitrate = get_parameter("bitrate").as_int();
+
+    _parameters_setter =
+        rclcpp::Node::add_on_set_parameters_callback(std::bind(&DepthAICamera::SetParameters, this, _1));
 }
 
 rcl_interfaces::msg::SetParametersResult DepthAICamera::SetParameters(const std::vector<rclcpp::Parameter>& parameters)
@@ -85,7 +87,7 @@ rcl_interfaces::msg::SetParametersResult DepthAICamera::SetParameters(const std:
         }
     }
 
-    if(ValidateParameters(width, height, fps, bitrate, encoding))
+    if (ValidateParameters(width, height, fps, bitrate, encoding))
     {
         _videoWidth = width;
         _videoHeight = height;
@@ -106,7 +108,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr)
     int bitrate = _videoBitrate;
     std::string encoding = _videoH265 ? "H265" : "H264";
 
-    if(ValidateParameters(width, height, fps, bitrate, encoding))
+    if (ValidateParameters(width, height, fps, bitrate, encoding))
     {
         _videoWidth = width;
         _videoHeight = height;
@@ -119,11 +121,11 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr)
 
 void DepthAICamera::TryRestarting()
 {
-    if(_thread_running )
+    if (_thread_running)
     {
         _thread_running = false;
     }
-    if(_processing_thread.joinable())
+    if (_processing_thread.joinable())
     {
         _processing_thread.join();
     }
@@ -221,7 +223,7 @@ void DepthAICamera::ProcessingThread()
             CompressedImageMsg video_stream_chunk{};
             video_stream_chunk.header.frame_id = _color_camera_frame;
             video_stream_chunk.data.swap(videoPtr->getData());
-            video_stream_chunk.format = _videoH265  ? "H265" : "H264";
+            video_stream_chunk.format = _videoH265 ? "H265" : "H264";
             _video_publisher->publish(video_stream_chunk);
             RCLCPP_INFO(get_logger(), "VIDEO");
         }
