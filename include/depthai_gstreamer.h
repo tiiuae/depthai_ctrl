@@ -2,18 +2,9 @@
 #ifndef FOG_SW_DEPTHAI_GSTREAMER_H
 #define FOG_SW_DEPTHAI_GSTREAMER_H
 
-#include <gst/gst.h>
-#include <gst/gstbus.h>
-#include <gst/gstcaps.h>
-#include <gst/gstelement.h>
-#include <gst/gstpipeline.h>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <std_msgs/msg/string.hpp>
-#include <queue>
-#include <mutex>
-#include <arpa/inet.h>
-#include <nlohmann/json.hpp>
 
 namespace depthai_ctrl
 {
@@ -27,90 +18,37 @@ class DepthAIGStreamer : public rclcpp::Node
     DepthAIGStreamer(int argc, char* argv[]);
     DepthAIGStreamer(const rclcpp::NodeOptions & options);
 
-    void GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg);
-
     ~DepthAIGStreamer();
 
-    void DestroyPipeline();
+//    void DestroyPipeline();
+//
+//    void BuildDefaultPipeline();
+//
+//    void CreatePipeline();
 
-    void BuildDefaultPipeline();
+//    void StopStream();
 
-    void CreatePipeline();
-
-//    void StopStream(void);
-
-    bool IsStreamPlaying() { return mIsStreamPlaying; }
+//    bool IsStreamPlaying();
 
   protected:
 
-    static void* gst_PlayStream(gpointer data);
 
-    static gboolean gst_MissingPluginMessage(GstMessage* msg);
-
-    static const gchar* gst_missing_plugin_message_get_description(GstMessage* msg)
-    {
-        return gst_structure_get_string(gst_message_get_structure(msg), "name");
-    }
-
-    static gboolean gst_StreamEventCallBack(GstBus* bus, GstMessage* message, gpointer data);
-
-    static void gst_NeedDataCallBack(GstElement* appsrc, guint unused_size, gpointer user_data);
-
-    static gboolean gst_StreamRestartCallback(gpointer user_data);
-
-    // Use this function to execute code when timer is removed.
-    static void StreamPlayingRestartDone(gpointer user_data) { (void)user_data; }
 
   private:
 
+    rclcpp::Subscription<CompressedImageMsg>::SharedPtr _video_subscriber;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
+    OnSetParametersCallbackHandle::SharedPtr _parameter_setter;
+
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+
+
     void Initialize();
 
-    bool IsVideoStreamAvailable()
-    {
-        return _video_subscriber->get_publisher_count() > 0 && !(_message_queue.empty());
-    }
+    void GrabVideoMsg(CompressedImageMsg::SharedPtr video_msg);
 
-    std::string ReadIpAddresFromUdpAddress(void);
-
-    int ReadPortFromUdpAddress(void);
-
-    std::shared_ptr<rclcpp::Subscription<CompressedImageMsg>> _video_subscriber;
-    std::queue<CompressedImageMsg::SharedPtr> _message_queue;
-    std::mutex _message_queue_mutex;
-
-    bool mIsStreamPlaying;
-    int mEncoderWidth;
-    int mEncoderHeight;
-    int mEncoderFps;
-    int mEncoderBitrate;
-    std::string mEncoderProfile;
-    std::string mStreamAddress;
-
-    GMainLoop* mLoop;
-    GstElement* mPipeline;
-    GstElement* mAppsrc;
-    GstElement* mH26xparse;
-    GstElement* mH26xpay;
-    GstElement* mUdpSink;
-    guint mBusWatchId;
-    GstBus* mBus;
-    guint mNeedDataSignalId;
-    GThread* mLoopThread;
-    GstElement* mQueue1;
-    GstElement* mRtspSink;
-
-    GstClockTime mGstTimestamp;
-    GstElement* mTestSrc;
-    GstElement* mTextOverlay;
-    GstElement* mH26xEnc;
-    GstElement* mTestSrcFilter;
-    GstElement* mH26xEncFilter;
-    guint mStreamPlayingCheckTimerId;
-    GMainContext* mLoopContext;
-
-
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _video_stream_command_subscriber;
-    OnSetParametersCallbackHandle::SharedPtr _parameter_setter;
+    //bool IsVideoStreamAvailable();
 
 
     void SetRclCppError(rcl_interfaces::msg::SetParametersResult& res, std::string msg)
@@ -120,13 +58,7 @@ class DepthAIGStreamer : public rclcpp::Node
         RCLCPP_ERROR(this->get_logger(), "%s", res.reason.c_str());
     }
 
-    bool IsIpAddressValid(const std::string& ip_address)
-    {
-        struct sockaddr_in sa;
-        int result = inet_pton(AF_INET, ip_address.c_str(), &(sa.sin_addr));
-
-        return result != 0;
-    }
+    bool IsIpAddressValid(const std::string& ip_address);
 
     void ValidateAddressParameters(const std::string address, rcl_interfaces::msg::SetParametersResult& res);
 

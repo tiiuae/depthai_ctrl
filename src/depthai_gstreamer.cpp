@@ -1,79 +1,35 @@
 #include "depthai_gstreamer.h"
+#include "depthai_gstreamer_impl.h"
 
 using namespace depthai_ctrl;
 using std::placeholders::_1;
 
+
 DepthAIGStreamer::DepthAIGStreamer(int argc, char* argv[])
     : Node("depthai_gstreamer"),
-      mIsStreamPlaying(false),
-      mEncoderWidth(1280),
-      mEncoderHeight(720),
-      mEncoderFps(25),
-      mEncoderBitrate(3000000),
-      mEncoderProfile("H264"),
-      mLoop(nullptr),
-      mPipeline(nullptr),
-      mAppsrc(nullptr),
-      mH26xparse(nullptr),
-      mH26xpay(nullptr),
-      mUdpSink(nullptr),
-      mBusWatchId(0),
-      mBus(nullptr),
-      mNeedDataSignalId(0),
-      mLoopThread(nullptr),
-      mQueue1(nullptr),
-      mRtspSink(nullptr),
-      mGstTimestamp(0),
-      mTestSrc(nullptr),
-      mTextOverlay(nullptr),
-      mH26xEnc(nullptr),
-      mTestSrcFilter(nullptr),
-      mH26xEncFilter(nullptr),
-      mStreamPlayingCheckTimerId(0),
-      mLoopContext(nullptr)
+    _impl(new Impl(&argc, &argv))
 {
-    gst_init(&argc, &argv);
     Initialize();
 }
 
 DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions& options)
     : Node("depthai_gstreamer", options),
-      mIsStreamPlaying(false),
-      mEncoderWidth(1280),
-      mEncoderHeight(720),
-      mEncoderFps(25),
-      mEncoderBitrate(3000000),
-      mEncoderProfile("H264"),
-      mLoop(nullptr),
-      mPipeline(nullptr),
-      mAppsrc(nullptr),
-      mH26xparse(nullptr),
-      mH26xpay(nullptr),
-      mUdpSink(nullptr),
-      mBusWatchId(0),
-      mBus(nullptr),
-      mNeedDataSignalId(0),
-      mLoopThread(nullptr),
-      mQueue1(nullptr),
-      mRtspSink(nullptr),
-      mGstTimestamp(0),
-      mTestSrc(nullptr),
-      mTextOverlay(nullptr),
-      mH26xEnc(nullptr),
-      mTestSrcFilter(nullptr),
-      mH26xEncFilter(nullptr),
-      mStreamPlayingCheckTimerId(0),
-      mLoopContext(nullptr)
+      _impl(new Impl(nullptr, nullptr))
 {
-    gst_init(0, nullptr);
     Initialize();
 }
 
+bool DepthAIGStreamer::IsIpAddressValid(const std::string& ip_address)
+{
+    struct sockaddr_in sa;
+    int result = inet_pton(AF_INET, ip_address.c_str(), &(sa.sin_addr));
+
+    return result != 0;
+}
+
+
 void DepthAIGStreamer::Initialize()
 {
-    mLoopContext = g_main_context_default();
-    mLoop = g_main_loop_new(mLoopContext, false);
-
     declare_parameter<std::string>("video_stream_topic", "camera/color/video");
 
     const std::string video_stream_topic = get_parameter("video_stream_topic").as_string();
@@ -82,10 +38,15 @@ void DepthAIGStreamer::Initialize()
         rclcpp::SystemDefaultsQoS(),
         std::bind(&DepthAIGStreamer::GrabVideoMsg, this, std::placeholders::_1));
 
-    _video_stream_command_subscriber = this->create_subscription<std_msgs::msg::String>(
+    _stream_command_subscriber = this->create_subscription<std_msgs::msg::String>(
         "videostreamcmd",
         rclcpp::SystemDefaultsQoS(),
         std::bind(&DepthAIGStreamer::VideoStreamCommand, this, std::placeholders::_1));
+
+    declare_parameter<int>("width", 1280);
+    declare_parameter<int>("height", 720);
+    declare_parameter<int>("fps", 25);
+    declare_parameter<int>("bitrate", 3000000);
 
     rcl_interfaces::msg::ParameterDescriptor encoding_desc;
     encoding_desc.name = "encoding";
@@ -93,10 +54,6 @@ void DepthAIGStreamer::Initialize()
     encoding_desc.description = "Encoding format of the video stream.";
     encoding_desc.additional_constraints = "Accepted values are H264 and H265.";
     declare_parameter<std::string>("encoding", "H264", encoding_desc);
-    declare_parameter<int>("width", 1280);
-    declare_parameter<int>("height", 720);
-    declare_parameter<int>("fps", 25);
-    declare_parameter<int>("bitrate", 3000000);
 
     rcl_interfaces::msg::ParameterDescriptor start_stream_on_boot_desc;
     start_stream_on_boot_desc.name = "start_stream_on_boot";
@@ -107,8 +64,8 @@ void DepthAIGStreamer::Initialize()
     start_stream_on_boot_desc.additional_constraints =
         "This parameter has no "
         "effect after node has started.";
+    declare_parameter<bool>("start_stream_on_boot", false, start_stream_on_boot_desc);
 
-    declare_parameter<bool>("start_stream_on_boot", true, start_stream_on_boot_desc);
     rcl_interfaces::msg::ParameterDescriptor address_desc;
     address_desc.name = "address";
     address_desc.type = rclcpp::PARAMETER_STRING;
@@ -123,594 +80,47 @@ void DepthAIGStreamer::Initialize()
         "rtsps://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@video-stream.sacplatform.com:8555";
     std::string ns = std::string(get_namespace());
     declare_parameter<std::string>("address", stream_path + ns, address_desc);
+
     RCLCPP_DEBUG(get_logger(), "Namespace: %s", (stream_path + ns).c_str());
 
-    mEncoderWidth = get_parameter("width").as_int();
-    mEncoderHeight = get_parameter("height").as_int();
-    mEncoderFps = get_parameter("fps").as_int();
-    mEncoderBitrate = get_parameter("bitrate").as_int();
-    mEncoderProfile = get_parameter("encoding").as_string();
-    mStreamAddress = get_parameter("address").as_string();
+    _impl->SetEncoderWidth(get_parameter("width").as_int());
+    _impl->SetEncoderHeight(get_parameter("height").as_int());
+    _impl->SetEncoderFps(get_parameter("fps").as_int());
+    _impl->SetEncoderBitrate(get_parameter("bitrate").as_int());
+    _impl->SetEncoderProfile(get_parameter("encoding").as_string());
+    _impl->SetStreamAddress(get_parameter("address").as_string());
+
+
+    RCLCPP_INFO(get_logger(), "DepthAI GStreamer 1.0.0 started.");
+
 
     if (get_parameter("start_stream_on_boot").as_bool())
     {
-        RCLCPP_INFO(get_logger(), "Start DepthAI GStreamer video stream.");
-        CreatePipeline();
+        RCLCPP_INFO(get_logger(), "DepthAI GStreamer: start stream on boot");
+        _impl->CreatePipeLine();
     }
 
     _parameter_setter =
         rclcpp::Node::add_on_set_parameters_callback(std::bind(&DepthAIGStreamer::SetParameters, this, _1));
 }
 
-void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
-{
-    std::lock_guard<std::mutex> lock(_message_queue_mutex);
-    _message_queue.push(video_msg);
-    // When message queue is too big - start deleting old messages
-    if (_message_queue.size() > 100)
-    {
-        _message_queue.pop();
-    }
-}
-
 DepthAIGStreamer::~DepthAIGStreamer()
 {
-    DestroyPipeline();
-    if (mLoop != nullptr)
-    {
-        g_main_loop_unref(mLoop);
-        mLoop = nullptr;
-    }
+    _impl->DestroyPipeline();
+    _impl.reset();
 }
 
-void DepthAIGStreamer::DestroyPipeline(void)
+void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
-    if (mPipeline != nullptr)
+    _impl->_message_queue_mutex.lock();
+    _impl->_message_queue.push(video_msg);
+    _impl->_message_queue_mutex.unlock();
+    RCLCPP_INFO(get_logger(), "RECEIVED VIDEO CHUNK");
+    // When message queue is too big - delete old messages
+    if (_impl->_message_queue.size() > 1000)
     {
-        gst_element_set_state(mPipeline, GST_STATE_NULL);
-        gst_object_unref(GST_OBJECT(mPipeline));
-        mPipeline = nullptr;
+        _impl->_message_queue.pop();
     }
-    if (mBus != nullptr)
-    {
-        gst_object_unref(mBus);
-        mBus = nullptr;
-    }
-    if (mBusWatchId != 0)
-    {
-        g_source_remove(mBusWatchId);
-        mBusWatchId = 0;
-    }
-}
-
-void DepthAIGStreamer::BuildDefaultPipeline(void)
-{
-    bool is_udp_protocol = (mStreamAddress.find("udp://") == 0);
-
-    mPipeline = gst_pipeline_new("default_pipeline");
-
-    // Video test source.
-    mTestSrc = gst_element_factory_make("videotestsrc", "source");
-    g_object_set(G_OBJECT(mTestSrc), "pattern", 2, NULL);
-    mTestSrcFilter = gst_element_factory_make("capsfilter", "source_filter");
-    g_object_set(G_OBJECT(mTestSrcFilter),
-                 "caps",
-                 gst_caps_new_simple("video/x-raw",
-                                     "format",
-                                     G_TYPE_STRING,
-                                     "I420",
-                                     "width",
-                                     G_TYPE_INT,
-                                     mEncoderWidth,
-                                     "height",
-                                     G_TYPE_INT,
-                                     mEncoderHeight,
-                                     "framerate",
-                                     GST_TYPE_FRACTION,
-                                     mEncoderFps,
-                                     1,
-                                     NULL),
-                 NULL);
-
-    // Text overlay.
-    mTextOverlay = gst_element_factory_make("textoverlay", "text");
-    g_object_set(G_OBJECT(mTextOverlay),
-                 "text",
-                 "Camera not detected!",
-                 "valignment",
-                 4,  // 4 = center
-                 "halignment",
-                 1,  // 1 = center
-                 "font-desc",
-                 "Sans, 42",
-                 NULL);
-
-    // Software encoder and parser.
-    if (mEncoderProfile == "H265")
-    {
-        mH26xEnc = gst_element_factory_make("x265enc", "encoder");
-        g_object_set(G_OBJECT(mH26xEnc),
-                     "bitrate",
-                     500,  // 500 kbit/sec
-                     "speed-preset",
-                     2,  // 2 = superfast
-                     "tune",
-                     4,  // 4 = zerolatency
-                     NULL);
-        mH26xparse = gst_element_factory_make("h265parse", "parser");
-    }
-    else
-    {
-        mH26xEnc = gst_element_factory_make("x264enc", "encoder");
-        mH26xparse = gst_element_factory_make("h264parse", "parser");
-    }
-
-    // Sink element. UDP or RTSP client.
-    if (is_udp_protocol)
-    {
-        // UDP Sink
-        if (mEncoderProfile == "H265")
-        {
-            mH26xpay = gst_element_factory_make("rtph265pay", "payload");
-        }
-        else
-        {
-            mH26xpay = gst_element_factory_make("rtph264pay", "payload");
-        }
-        g_object_set(G_OBJECT(mH26xpay), "pt", 96, NULL);
-        mUdpSink = gst_element_factory_make("udpsink", "udp_sink");
-        g_object_set(G_OBJECT(mUdpSink), "host", ReadIpAddresFromUdpAddress().c_str(), NULL);
-        g_object_set(G_OBJECT(mUdpSink), "port", ReadPortFromUdpAddress(), NULL);
-    }
-    else
-    {
-        // RTSP client sink
-        mRtspSink = gst_element_factory_make("rtspclientsink", "rtsp_sink");
-        g_object_set(G_OBJECT(mRtspSink),
-                     "protocols",
-                     4,  // 4 = tcp
-                     "tls-validation-flags",
-                     0,
-                     "location",
-                     mStreamAddress.c_str(),
-                     NULL);
-    }
-
-    // Caps definition for source element.
-    std::string profile = mEncoderProfile;
-    std::stringstream ss;
-    std::string gstFormat;
-    std::transform(profile.begin(), profile.end(), profile.begin(), ::tolower);
-    ss << "video/x-" << profile;
-    ss >> gstFormat;
-    mH26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
-    g_object_set(G_OBJECT(mH26xEncFilter),
-                 "caps",
-                 gst_caps_new_simple(gstFormat.c_str(),
-                                     "profile",
-                                     G_TYPE_STRING,
-                                     "baseline",
-                                     "pass",
-                                     G_TYPE_INT,
-                                     5,
-                                     "trellis",
-                                     G_TYPE_BOOLEAN,
-                                     false,
-                                     "tune",
-                                     G_TYPE_STRING,
-                                     "zero-latency",
-                                     "threads",
-                                     G_TYPE_INT,
-                                     0,
-                                     "speed-preset",
-                                     G_TYPE_STRING,
-                                     "superfast",
-                                     "subme",
-                                     G_TYPE_INT,
-                                     1,
-                                     "bitrate",
-                                     G_TYPE_INT,
-                                     4000,
-                                     NULL),
-                 NULL);
-
-    mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
-    mBusWatchId = gst_bus_add_watch(mBus, gst_StreamEventCallBack, this);
-    gst_object_unref(mBus);
-    mBus = nullptr;
-
-    if (is_udp_protocol)
-    {
-        gst_bin_add_many(GST_BIN(mPipeline),
-                         mTestSrc,
-                         mTestSrcFilter,
-                         mTextOverlay,
-                         mH26xEnc,
-                         mH26xEncFilter,
-                         mH26xparse,
-                         mH26xpay,
-                         mUdpSink,
-                         NULL);
-        gst_element_link_many(
-            mTestSrc, mTestSrcFilter, mTextOverlay, mH26xEnc, mH26xEncFilter, mH26xparse, mH26xpay, mUdpSink, NULL);
-    }
-    else
-    {
-        gst_bin_add_many(GST_BIN(mPipeline),
-                         mTestSrc,
-                         mTestSrcFilter,
-                         mTextOverlay,
-                         mH26xEnc,
-                         mH26xEncFilter,
-                         mH26xparse,
-                         mRtspSink,
-                         NULL);
-        gst_element_link_many(
-            mTestSrc, mTestSrcFilter, mTextOverlay, mH26xEnc, mH26xEncFilter, mH26xparse, mRtspSink, NULL);
-    }
-
-    mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGStreamer::gst_PlayStream, this);
-}
-
-void DepthAIGStreamer::CreatePipeline(void)
-{
-    if (!IsVideoStreamAvailable())
-    {
-        g_printerr("Warning: video stream is not available. Start default stream.\n");
-        BuildDefaultPipeline();
-        return;
-    }
-
-    bool is_udp_protocol = (mStreamAddress.find("udp://") == 0);
-
-    mPipeline = gst_pipeline_new("rgbCamSink_pipeline");
-    // Source element.
-    mAppsrc = gst_element_factory_make("appsrc", "source");
-    g_object_set(G_OBJECT(mAppsrc), "do-timestamp", true, "is-live", true, "block", true, "stream-type", 0, NULL);
-    gst_util_set_object_arg(G_OBJECT(mAppsrc), "format", "GST_FORMAT_TIME");
-    // H26x parser. Is this really needed?
-    if (mEncoderProfile == "H265")
-    {
-        mH26xparse = gst_element_factory_make("h265parse", "parser");
-    }
-    else
-    {
-        mH26xparse = gst_element_factory_make("h264parse", "parser");
-    }
-    mQueue1 = gst_element_factory_make("queue", "queue1");
-    // Sink element. UDP or RTSP client.
-    if (is_udp_protocol)
-    {
-        // UDP Sink
-        if (mEncoderProfile == "H265")
-        {
-            mH26xpay = gst_element_factory_make("rtph265pay", "payload");
-        }
-        else
-        {
-            mH26xpay = gst_element_factory_make("rtph264pay", "payload");
-        }
-        g_object_set(G_OBJECT(mH26xpay), "pt", 96, NULL);
-        mUdpSink = gst_element_factory_make("udpsink", "udp_sink");
-        g_object_set(G_OBJECT(mUdpSink), "host", ReadIpAddresFromUdpAddress().c_str(), NULL);
-        g_object_set(G_OBJECT(mUdpSink), "port", ReadPortFromUdpAddress(), NULL);
-    }
-    else
-    {
-        // RTSP client sink
-        mRtspSink = gst_element_factory_make("rtspclientsink", "rtsp_sink");
-        g_object_set(G_OBJECT(mRtspSink),
-                     "protocols",
-                     4,  // 4 = tcp
-                     "tls-validation-flags",
-                     0,
-                     "location",
-                     mStreamAddress.c_str(),
-                     NULL);
-    }
-
-    // Caps definition for source element.
-    std::string profile = mEncoderProfile;
-    std::stringstream ss;
-    std::string gstFormat;
-    std::transform(profile.begin(), profile.end(), profile.begin(), ::tolower);
-    ss << "video/x-" << profile;
-    ss >> gstFormat;
-    g_object_set(G_OBJECT(mAppsrc),
-                 "caps",
-                 gst_caps_new_simple(gstFormat.c_str(),
-                                     "width",
-                                     G_TYPE_INT,
-                                     mEncoderWidth,
-                                     "height",
-                                     G_TYPE_INT,
-                                     mEncoderHeight,
-                                     "framerate",
-                                     GST_TYPE_FRACTION,
-                                     mEncoderFps,
-                                     1,
-                                     NULL),
-                 NULL);
-
-    mH26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
-    g_object_set(
-        G_OBJECT(mH26xEncFilter),
-        "caps",
-        gst_caps_new_simple(
-            gstFormat.c_str(), "profile", G_TYPE_STRING, "main", "stream-format", G_TYPE_STRING, "byte-stream", NULL),
-        NULL);
-
-    mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
-    mBusWatchId = gst_bus_add_watch(mBus, gst_StreamEventCallBack, this);
-    gst_object_unref(mBus);
-    mBus = nullptr;
-
-    if (is_udp_protocol)
-    {
-        gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
-        gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
-    }
-    else
-    {
-        gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
-        gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
-    }
-    mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGStreamer::gst_PlayStream, this);
-
-    mNeedDataSignalId = g_signal_connect(mAppsrc, "need-data", G_CALLBACK(gst_NeedDataCallBack), this);
-}
-
-// void DepthAiGStreamer::SetStreamAddress(const std::string address)
-//{
-//    mStreamAddress = address;
-//    if (mRtspSink)
-//    {
-//        g_object_set(G_OBJECT(mRtspSink),
-//                     "protocols",
-//                     4,  // 4 = tcp
-//                     "location",
-//                     mStreamAddress.c_str(),
-//                     NULL);
-//    }
-//}
-
-void* DepthAIGStreamer::gst_PlayStream(gpointer data)
-{
-    auto depthAIGst = static_cast<DepthAIGStreamer*>(data);
-    gst_element_set_state(depthAIGst->mPipeline, GST_STATE_PLAYING);
-    g_main_loop_run(depthAIGst->mLoop);
-    g_thread_exit(depthAIGst->mLoopThread);
-
-    return nullptr;
-}
-
-gboolean DepthAIGStreamer::gst_MissingPluginMessage(GstMessage* msg)
-{
-    if (GST_MESSAGE_TYPE(msg) != GST_MESSAGE_ELEMENT || gst_message_get_structure(msg) == NULL)
-        return FALSE;
-
-    return gst_structure_has_name(gst_message_get_structure(msg), "missing-plugin");
-}
-
-gboolean DepthAIGStreamer::gst_StreamEventCallBack(GstBus* bus, GstMessage* message, gpointer data)
-{
-    (void)bus;
-    g_debug("%s: Got %s message\n", __FUNCTION__, GST_MESSAGE_TYPE_NAME(message));
-
-    DepthAIGStreamer* depthAIGst = (DepthAIGStreamer*)data;
-    GstTagList* list = nullptr;
-
-    switch (GST_MESSAGE_TYPE(message))
-    {
-        case GST_MESSAGE_STREAM_STATUS:
-            GstStreamStatusType statusType;
-            GstElement* element;
-
-            gst_message_parse_stream_status(message, &statusType, &element);
-            g_print("Element %s stream status type %d.\n", GST_OBJECT_NAME(message->src), statusType);
-            break;
-
-        case GST_MESSAGE_PROGRESS:
-            GstProgressType progressType;
-            gchar *code, *text;
-
-            gst_message_parse_progress(message, &progressType, &code, &text);
-            switch (progressType)
-            {
-                case GST_PROGRESS_TYPE_START:
-                case GST_PROGRESS_TYPE_CONTINUE:
-                case GST_PROGRESS_TYPE_COMPLETE:
-                case GST_PROGRESS_TYPE_CANCELED:
-                case GST_PROGRESS_TYPE_ERROR:
-                default:
-                    break;
-            }
-            g_print("Progress: (%s) %s\n", code, text);
-            g_free(code);
-            g_free(text);
-            break;
-
-        case GST_MESSAGE_NEW_CLOCK:
-            GstClock* clock;
-
-            gst_message_parse_new_clock(message, &clock);
-            g_print("New clock: %s\n", (clock ? GST_OBJECT_NAME(clock) : "NULL"));
-            break;
-
-        case GST_MESSAGE_LATENCY:
-            g_print("Redistribute latency...\n");
-            gst_bin_recalculate_latency(GST_BIN(depthAIGst->mPipeline));
-            break;
-
-        case GST_MESSAGE_ELEMENT:
-            if (gst_MissingPluginMessage(message))
-            {
-                const gchar* desc;
-
-                desc = gst_missing_plugin_message_get_description(message);
-                g_print("Missing element: %s\n", desc ? desc : "(no description)");
-            }
-            break;
-
-        case GST_MESSAGE_STATE_CHANGED:
-            GstState old_state, new_state;
-
-            gst_message_parse_state_changed(message, &old_state, &new_state, NULL);
-            g_print("Element %s changed state from %s to %s.\n",
-                    GST_OBJECT_NAME(message->src),
-                    gst_element_state_get_name(old_state),
-                    gst_element_state_get_name(new_state));
-            if (g_strrstr(GST_OBJECT_NAME(message->src), "rtspbin") && new_state == GST_STATE_PLAYING)
-            {
-                depthAIGst->mIsStreamPlaying = true;
-            }
-            break;
-
-        case GST_MESSAGE_EOS:
-            g_print("End of stream.\n");
-            g_main_loop_quit(depthAIGst->mLoop);
-            break;
-
-        case GST_MESSAGE_TAG:
-            list = gst_tag_list_new_empty();
-
-            gst_message_parse_tag(message, &list);
-
-            g_print("Tag: %s.\n", gst_tag_list_to_string(list));
-            gst_tag_list_unref(list);
-            break;
-
-        case GST_MESSAGE_WARNING:
-            gchar* warnDebug;
-            GError* warning;
-
-            gst_message_parse_warning(message, &warning, &warnDebug);
-            g_free(warnDebug);
-
-            g_warning("Warning: %s.\n", warning->message);
-            g_error_free(warning);
-            break;
-
-        case GST_MESSAGE_ERROR:
-            gchar* errDebug;
-            GError* error;
-            GSource* source;
-
-            gst_message_parse_error(message, &error, &errDebug);
-            g_printerr("ERROR from element %s: %s\n", GST_OBJECT_NAME(message->src), error->message);
-            g_printerr("Debugging info: %s\n", (errDebug) ? errDebug : "none");
-            if (error->code == G_FILE_ERROR_NODEV &&
-                g_strrstr(error->message, "Could not open resource for reading and writing"))
-            {
-                GstFlowReturn ret;
-                if (depthAIGst->mNeedDataSignalId != 0)
-                {
-                    g_signal_handler_disconnect(depthAIGst->mAppsrc, depthAIGst->mNeedDataSignalId);
-                }
-                if (depthAIGst->mAppsrc != nullptr)
-                {
-                    g_signal_emit_by_name(depthAIGst->mAppsrc, "end-of-stream", &ret);
-                    if (ret != GST_FLOW_OK)
-                    {
-                        g_printerr("Error: Emit end-of-stream failed\n");
-                    }
-                }
-                if (depthAIGst->mPipeline != nullptr)
-                {
-                    gst_element_set_state(depthAIGst->mPipeline, GST_STATE_NULL);
-                }
-                depthAIGst->mIsStreamPlaying = false;
-                // Restart stream after two seconds.
-                source = g_timeout_source_new(2000);
-                g_source_set_callback(source,
-                                      DepthAIGStreamer::gst_StreamRestartCallback,
-                                      depthAIGst,
-                                      DepthAIGStreamer::StreamPlayingRestartDone);
-                g_source_attach(source, depthAIGst->mLoopContext);
-                g_source_unref(source);
-            }
-            g_error_free(error);
-            g_free(errDebug);
-            break;
-
-        default:
-            break;
-    }
-
-    return true;
-}
-
-void DepthAIGStreamer::gst_NeedDataCallBack(GstElement* appsrc, guint unused_size, gpointer user_data)
-{
-    (void)unused_size;
-    GstFlowReturn ret;
-    GstBuffer* buffer;
-    auto depthAIGst = static_cast<DepthAIGStreamer*>(user_data);
-
-    CompressedImageMsg::SharedPtr image;
-    while (!bool(image))
-    {
-        std::cerr << "TRY TO GET SOME DATA!" << std::endl;
-        depthAIGst->_message_queue_mutex.lock();
-        if (!depthAIGst->_message_queue.empty())
-        {
-            image = depthAIGst->_message_queue.back();
-            depthAIGst->_message_queue.pop();
-        }
-        depthAIGst->_message_queue_mutex.unlock();
-    }
-    std::cerr << "WE GOT SOME DATA!" << std::endl;
-    auto& frame = image->data;
-
-    guint size = frame.size();
-    buffer = gst_buffer_new_allocate(NULL, size, NULL);
-    gst_buffer_fill(buffer, 0, (gconstpointer)(&frame[0]), size);
-
-    GST_BUFFER_PTS(buffer) = depthAIGst->mGstTimestamp;
-    GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, (int)depthAIGst->mEncoderFps);
-    depthAIGst->mGstTimestamp += GST_BUFFER_DURATION(buffer);
-
-    g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);
-    gst_buffer_unref(buffer);
-    if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING)
-    {
-        g_main_loop_quit(depthAIGst->mLoop);
-    }
-}
-
-gboolean DepthAIGStreamer::gst_StreamRestartCallback(gpointer user_data)
-{
-    auto depthAIGst = static_cast<DepthAIGStreamer*>(user_data);
-
-    g_debug("Restart stream because of connection failed.\n");
-    if (depthAIGst->mAppsrc)
-    {
-        depthAIGst->mNeedDataSignalId =
-            g_signal_connect(depthAIGst->mAppsrc, "need-data", G_CALLBACK(gst_NeedDataCallBack), depthAIGst);
-    }
-    gst_element_set_state(depthAIGst->mPipeline, GST_STATE_PLAYING);
-
-    return G_SOURCE_REMOVE;
-}
-
-std::string DepthAIGStreamer::ReadIpAddresFromUdpAddress(void)
-{
-    // String format is: udp://<ip_addr>:<port>
-    std::string addr = mStreamAddress;
-    std::string udp_protocol = "udp://";
-    addr.erase(0, udp_protocol.size());
-
-    return addr.substr(0, addr.find(":"));
-}
-
-int DepthAIGStreamer::ReadPortFromUdpAddress(void)
-{
-    // String format is: udp://<ip_addr>:<port>
-    std::string addr = mStreamAddress;
-    std::string udp_protocol = "udp://";
-    addr.erase(0, udp_protocol.size());
-
-    return atoi(addr.substr(addr.find(":") + 1).c_str());
 }
 
 void DepthAIGStreamer::ValidateAddressParameters(const std::string address,
@@ -814,6 +224,7 @@ rcl_interfaces::msg::SetParametersResult DepthAIGStreamer::SetParameters(
                 result.successful = false;
                 result.reason = "Not valid encoding. Allowed H264 and H265.";
                 RCLCPP_ERROR(this->get_logger(), "%s", result.reason.c_str());
+                continue;
             }
         }
 
@@ -825,12 +236,14 @@ rcl_interfaces::msg::SetParametersResult DepthAIGStreamer::SetParameters(
                 result.successful = false;
                 result.reason = "Width must be multiple of 8 for H26x encoder profile.";
                 RCLCPP_ERROR(this->get_logger(), "%s", result.reason.c_str());
+                continue;
             }
             if (width_val > 4096)
             {
                 result.successful = false;
                 result.reason = "Width must be smaller than 4096 for H26x encoder profile.";
                 RCLCPP_ERROR(this->get_logger(), "%s", result.reason.c_str());
+                continue;
             }
         }
 
@@ -842,18 +255,19 @@ rcl_interfaces::msg::SetParametersResult DepthAIGStreamer::SetParameters(
                 result.successful = false;
                 result.reason = "Heigth must be multiple of 8 for H26x encoder profile.";
                 RCLCPP_ERROR(this->get_logger(), "%s", result.reason.c_str());
+                continue;
             }
             if (height_val > 4096)
             {
                 result.successful = false;
                 result.reason = "Height must be smaller than 4096 for H26x encoder profile.";
                 RCLCPP_ERROR(this->get_logger(), "%s", result.reason.c_str());
+                continue;
             }
         }
-
         if (parameter.get_name() == "address")
         {
-            if (IsStreamPlaying())
+            if (_impl->IsStreamPlaying())
             {
                 result.successful = false;
                 result.reason = "Cannot change stream address while stream is playing.";
@@ -863,9 +277,9 @@ rcl_interfaces::msg::SetParametersResult DepthAIGStreamer::SetParameters(
             ValidateAddressParameters(addr, result);
             if (!result.successful)
             {
-                return result;
+                result.successful = false;
+                result.reason = "Address is wrong.";
             }
-            mStreamAddress = addr;
         }
     }
     return result;
@@ -886,27 +300,26 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
             RCLCPP_ERROR(this->get_logger(), "Error in stream address. Stream cannot be started.");
             return;
         }
-        mStreamAddress = address;
+        _impl->SetStreamAddress(address);
     }
     if (!cmd["Command"].empty())
     {
-
         std::string command = cmd["Command"];
         std::transform(
             command.begin(), command.end(), command.begin(), [](unsigned char c) { return std::tolower(c); });
         if (command == "start")
         {
-            if (!IsStreamPlaying())
+            if (!_impl->IsStreamPlaying())
             {
-                mEncoderWidth = get_parameter("width").as_int();
-                mEncoderHeight = get_parameter("height").as_int();
-                mEncoderFps = get_parameter("fps").as_int();
-                mEncoderBitrate = get_parameter("bitrate").as_int();
-                mEncoderProfile = get_parameter("encoding").as_string();
-                mStreamAddress = get_parameter("address").as_string();
+                _impl->SetEncoderWidth(get_parameter("width").as_int());
+                _impl->SetEncoderHeight(get_parameter("height").as_int());
+                _impl->SetEncoderFps(get_parameter("fps").as_int());
+                _impl->SetEncoderBitrate(get_parameter("bitrate").as_int());
+                _impl->SetEncoderProfile(get_parameter("encoding").as_string());
+                _impl->SetStreamAddress(get_parameter("address").as_string());
 
                 RCLCPP_INFO(this->get_logger(), "Start DepthAI camera streaming.");
-                CreatePipeline();
+                _impl->CreatePipeLine();
                 return;
             }
             RCLCPP_INFO(this->get_logger(), "DepthAI camera already streaming.");
@@ -914,9 +327,12 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
         else if (command == "stop")
         {
             RCLCPP_INFO(this->get_logger(), "Stop DepthAI camera streaming.");
+            _impl->DestroyPipeline();
         }
     }
 }
+
+
 
 #include <rclcpp_components/register_node_macro.hpp>
 RCLCPP_COMPONENTS_REGISTER_NODE(depthai_ctrl::DepthAIGStreamer)

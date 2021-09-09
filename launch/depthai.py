@@ -41,7 +41,7 @@ def generate_launch_description():
                 
                 parameters=[
                     #pkg_path + '/config/camera_config.yaml',
-                    {"use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")},
+                    #{"use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")},
                 ],
                 remappings=[
                 ],
@@ -51,19 +51,20 @@ def generate_launch_description():
             ComposableNode(
                 namespace=namespace,
                 name='depthai_gstreamer',
-                package='pkg_name',
+                package=pkg_name,
                 plugin='depthai_ctrl::DepthAIGStreamer',
                 remappings=[
 
                 ],
                 parameters=[
                     #pkg_path + '/config/gstreamer_config.yaml',
-                    {"use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")},
+                    {"start_stream_on_boot": False},
+                    #{"use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")},
                 ],
             ),
         ],
         output='screen',
         prefix=dbg_sub,
-        parameters=[{"use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")},],
+        #parameters=[{"use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")},],
     ))
     return ld

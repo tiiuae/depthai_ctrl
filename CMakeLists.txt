@@ -31,7 +31,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 )
 endif()
 
-find_package(ament_cmake REQUIRED)
+#find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -56,11 +56,10 @@ ament_target_dependencies(camera_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(camera_node PUBLIC depthai_camera)
 
 
-
 # DepthAI GStreamer as Component library
 add_library(depthai_gstreamer SHARED src/depthai_gstreamer.cpp)
 ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs)
-target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES})
+target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0)
 
 # DepthAI GStreamer as separate node
 add_executable(gstreamer_node src/gstreamer_node.cpp)
@@ -69,6 +68,16 @@ target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
 
 rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
 rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
+
+# Combined DepthAI node
+add_executable(multi_node src/multi_node.cpp)
+ament_target_dependencies(multi_node PUBLIC rclcpp rclcpp_components)
+target_link_libraries(multi_node PUBLIC depthai_camera depthai_gstreamer)
+
+# Explicitly force to re-compile binary whenever library changed
+add_dependencies(camera_node depthai_camera)
+add_dependencies(multi_node depthai_gstreamer depthai_camera)
+add_dependencies(gstreamer_node depthai_gstreamer)
 
 # Set some errors
 #if(NOT MSVC)
@@ -81,10 +90,15 @@ rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::Dept
 #set_property(TARGET depthai_ctrl PROPERTY CXX_EXTENSIONS OFF)
 #
 
-install(TARGETS depthai_camera depthai_gstreamer camera_node gstreamer_node
+install(TARGETS depthai_camera depthai_gstreamer
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)
+
+install(TARGETS
+        camera_node gstreamer_node multi_node
+        DESTINATION lib/${PROJECT_NAME})
+
 
 install(DIRECTORY launch
         DESTINATION share/${PROJECT_NAME}

@@ -102,21 +102,21 @@ rcl_interfaces::msg::SetParametersResult DepthAICamera::SetParameters(const std:
 
 void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr)
 {
-    int width = _videoWidth;
-    int height = _videoHeight;
-    int fps = _videoFps;
-    int bitrate = _videoBitrate;
-    std::string encoding = _videoH265 ? "H265" : "H264";
-
-    if (ValidateParameters(width, height, fps, bitrate, encoding))
-    {
-        _videoWidth = width;
-        _videoHeight = height;
-        _videoFps = fps;
-        _videoBitrate = bitrate;
-        _videoH265 = (encoding == "H265");
-        TryRestarting();
-    }
+//    int width = _videoWidth;
+//    int height = _videoHeight;
+//    int fps = _videoFps;
+//    int bitrate = _videoBitrate;
+//    std::string encoding = _videoH265 ? "H265" : "H264";
+//
+//    if (ValidateParameters(width, height, fps, bitrate, encoding))
+//    {
+//        _videoWidth = width;
+//        _videoHeight = height;
+//        _videoFps = fps;
+//        _videoBitrate = bitrate;
+//        _videoH265 = (encoding == "H265");
+//        TryRestarting();
+//    }
 }
 
 void DepthAICamera::TryRestarting()
@@ -152,13 +152,14 @@ void DepthAICamera::TryRestarting()
 
     // Setup Color Camera
     colorCamera->setBoardSocket(dai::CameraBoardSocket::RGB);
-    colorCamera->setVideoSize(_videoWidth, _videoHeight);
-    colorCamera->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
+    colorCamera->setResolution(dai::ColorCameraProperties::SensorResolution::THE_4_K);
     colorCamera->setPreviewSize(_videoWidth, _videoHeight);
-
+    colorCamera->setVideoSize(_videoWidth, _videoHeight);
+    colorCamera->setFps(float(_videoFps));
+    videoEncoder->setBitrate(_videoBitrate);
     Profile encoding = _videoH265 ? Profile::H265_MAIN : Profile::H264_MAIN;
     videoEncoder->setDefaultProfilePreset(_videoWidth, _videoHeight, static_cast<float>(_videoFps), encoding);
-    videoEncoder->setBitrate(_videoBitrate);
+
 
     colorCamera->video.link(videoEncoder->input);
     videoEncoder->bitstream.link(xoutVideo->input);
@@ -204,19 +205,19 @@ void DepthAICamera::ProcessingThread()
         {
             auto image = ConvertImage(leftPtr, _left_camera_frame);
             _left_publisher->publish(*image);
-            RCLCPP_INFO(get_logger(), "LEFT");
+            //RCLCPP_INFO(get_logger(), "LEFT");
         }
         if (rightPtr != nullptr)
         {
             auto image = ConvertImage(rightPtr, _right_camera_frame);
             _right_publisher->publish(*image);
-            RCLCPP_INFO(get_logger(), "RIGHT");
+            //RCLCPP_INFO(get_logger(), "RIGHT");
         }
         if (colorPtr != nullptr)
         {
             auto image = ConvertImage(colorPtr, _color_camera_frame);
             _color_publisher->publish(*image);
-            RCLCPP_INFO(get_logger(), "COLOR");
+            //RCLCPP_INFO(get_logger(), "COLOR");
         }
         if (videoPtr != nullptr)
         {
@@ -225,7 +226,7 @@ void DepthAICamera::ProcessingThread()
             video_stream_chunk.data.swap(videoPtr->getData());
             video_stream_chunk.format = _videoH265 ? "H265" : "H264";
             _video_publisher->publish(video_stream_chunk);
-            RCLCPP_INFO(get_logger(), "VIDEO");
+            //RCLCPP_INFO(get_logger(), "VIDEO");
         }
     }
 }

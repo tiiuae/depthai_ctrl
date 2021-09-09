@@ -8,7 +8,6 @@ int main(int argc, char * argv[])
 
     std::cout << "DepthAI GStreamer Node." << std::endl;
     auto gstreamer = std::make_shared<DepthAIGStreamer>(argc, argv);
-    gstreamer->CreatePipeline();
     rclcpp::spin(gstreamer);
     rclcpp::shutdown();
 
