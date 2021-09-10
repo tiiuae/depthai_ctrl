@@ -1,5 +1,6 @@
 #include "depthai_gstreamer.h"
 #include "depthai_gstreamer_impl.h"
+#include <nlohmann/json.hpp>
 
 using namespace depthai_ctrl;
 using std::placeholders::_1;
@@ -327,6 +328,7 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
         else if (command == "stop")
         {
             RCLCPP_INFO(this->get_logger(), "Stop DepthAI camera streaming.");
+            _impl->StopStream();
             _impl->DestroyPipeline();
         }
     }

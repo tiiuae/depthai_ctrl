@@ -8,7 +8,6 @@
 #include <gst/gstcaps.h>
 #include <gst/gstelement.h>
 #include <gst/gstpipeline.h>
-#include <nlohmann/json.hpp>
 #include <mutex>
 #include <queue>
 
@@ -182,10 +181,11 @@ struct DepthAIGStreamer::Impl
         // Source element.
         mAppsrc = gst_element_factory_make("appsrc", "source");
         g_object_set(G_OBJECT(mAppsrc),
-                     "do-timestamp", true,
+                     //"do-timestamp", true,
                      "is-live", true,
-                     "block", true,
-                     "stream-type", 0,
+                     //"block", false,
+                     "format", "GST_FORMAT_TIME",
+                     //"stream-type", 0,
                      NULL);
         gst_util_set_object_arg(G_OBJECT(mAppsrc), "format", "GST_FORMAT_TIME");
         // H26x parser. Is this really needed?
@@ -251,9 +251,11 @@ struct DepthAIGStreamer::Impl
             gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
         }
 
+        sourceid = 0;
         mLoopThread = g_thread_new("GstThread", (GThreadFunc)Impl::PlayStream, this);
 
         mNeedDataSignalId = g_signal_connect(mAppsrc, "need-data", G_CALLBACK(NeedDataCallBack), this);
+        g_signal_connect(mAppsrc, "enough-data", G_CALLBACK(StopFeedHandler), this);
     }
 
     void StopStream(void)
@@ -351,12 +353,12 @@ struct DepthAIGStreamer::Impl
     void SetStreamAddress(const std::string address)
     {
         mStreamAddress = address;
-        if (mRtspSink != nullptr) {
-            g_object_set(G_OBJECT(mRtspSink),
-                         "protocols", 4, // 4 = tcp
-                         "location", mStreamAddress.c_str(),
-                         NULL);
-        }
+//        if (mRtspSink != nullptr) {
+//            g_object_set(G_OBJECT(mRtspSink),
+//                         "protocols", 4, // 4 = tcp
+//                         "location", mStreamAddress.c_str(),
+//                         NULL);
+//        }
     }
 
     //DepthAICam *depthAICam;
@@ -536,44 +538,73 @@ struct DepthAIGStreamer::Impl
 
     static void NeedDataCallBack(GstElement *appsrc, guint unused_size, gpointer data)
     {
-        (void)unused_size;
-        GstFlowReturn ret;
-        GstBuffer *buffer;
-        Impl *depthAIGst = (Impl *)data;
-        CompressedImageMsg::SharedPtr image;
-        depthAIGst->_message_queue_mutex.lock();
-        if(!depthAIGst->_message_queue.empty())
+        std::cerr << "NEED DATA: ";
+        auto impl = static_cast<DepthAIGStreamer::Impl*>(data);
+        if (impl->sourceid == 0)
         {
-            image = depthAIGst->_message_queue.front();
-            depthAIGst->_message_queue.pop();
-        }
-        depthAIGst->_message_queue_mutex.unlock();
-
-        if(image)
-        {
-            std::cout << "NeedData: SUCCESSFULL" << std::endl;
-            auto& frame = image->data;
-
-            guint size = frame.size();
-            buffer = gst_buffer_new_allocate(NULL, size, NULL);
-            gst_buffer_fill(buffer, 0, (gconstpointer)(&frame[0]), size);
-
-            GST_BUFFER_PTS(buffer) = depthAIGst->mGstTimestamp;
-            GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, (int)depthAIGst->mEncoderFps);
-            depthAIGst->mGstTimestamp += GST_BUFFER_DURATION(buffer);
-
-            g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);
-            gst_buffer_unref(buffer);
-            if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING)
-            {
-                g_main_loop_quit(depthAIGst->mLoop);
-            }
+            impl->sourceid = g_idle_add((GSourceFunc)PushDataHandler, data);
+            std::cerr << "Start feeding into source " << std::to_string(impl->sourceid);
         }
         else
         {
-            std::cout << "NeedData: None" << std::endl;
+            std::cerr << "source already exists";
+        }
+        std::cerr << std::endl;
+
+    }
+
+    static gboolean PushDataHandler(gpointer data, GstElement* appsrc)
+    {
+        auto impl = static_cast<DepthAIGStreamer::Impl*>(data);
+        CompressedImageMsg::SharedPtr image;
+        impl->_message_queue_mutex.lock();
+        std::cerr << "PUSH SOME DATA; (" << impl->_message_queue.size() << " chunks left in buffer)" << std::endl;
+        if (!impl->_message_queue.empty())
+        {
+            image = impl->_message_queue.front();
+            impl->_message_queue.pop();
+        }
+        impl->_message_queue_mutex.unlock();
+
+        if (image)
+        {
+            auto& frame = image->data;
+
+            guint size = frame.size();
+            GstBuffer* buffer = gst_buffer_new_allocate(NULL, size, NULL);
+            gst_buffer_fill(buffer, 0, (gconstpointer)(&frame[0]), size);
+
+            GST_BUFFER_PTS(buffer) = impl->mGstTimestamp;
+            // GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, (int)depthAIGst->mEncoderFps);
+            GST_BUFFER_DURATION(buffer) = gst_util_uint64_scale_int(1, GST_SECOND, 8);
+            impl->mGstTimestamp += GST_BUFFER_DURATION(buffer);
+
+            GstFlowReturn ret{};
+            g_signal_emit_by_name(impl->mAppsrc, "push-buffer", buffer, &ret);
+            gst_buffer_unref(buffer);
+            if (ret != GST_FLOW_OK /*&& ret != GST_FLOW_FLUSHING*/)
+            {
+                GST_DEBUG("PushDataHandler error");
+                g_main_loop_quit(impl->mLoop);
+                return FALSE;
+            }
+            return TRUE;
+        }
+        return FALSE;
+    }
+
+    static void StopFeedHandler(GstElement* appsrc, gpointer data)
+    {
+        std::cerr << "ENOUGH DATA: " << std::endl;
+        auto impl = static_cast<DepthAIGStreamer::Impl*>(data);
+        if (impl->sourceid != 0)
+        {
+            g_debug("Stop feeding\n");
+            g_source_remove(impl->sourceid);
+            impl->sourceid = 0;
         }
     }
+
 
     static gboolean StreamPlayingRestartCallback(gpointer user_data)
     {
@@ -584,6 +615,8 @@ struct DepthAIGStreamer::Impl
             depthAIGst->mNeedDataSignalId = g_signal_connect(
                 depthAIGst->mAppsrc,"need-data",
                 G_CALLBACK(NeedDataCallBack), depthAIGst);
+            g_signal_connect(depthAIGst->mAppsrc, "enough-data", G_CALLBACK(StopFeedHandler), depthAIGst);
+
         }
         gst_element_set_state(depthAIGst->mPipeline, GST_STATE_PLAYING);
 
@@ -643,6 +676,7 @@ struct DepthAIGStreamer::Impl
     GstElement *mH26xEncFilter;
     guint mStreamPlayingCheckTimerId;
     GMainContext *mLoopContext;
+    guint sourceid = 0;
 };
 
 
