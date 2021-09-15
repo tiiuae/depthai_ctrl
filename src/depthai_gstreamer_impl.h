@@ -169,11 +169,11 @@ struct DepthAIGStreamer::Impl
 
     void CreatePipeLine(void)
     {
-        if (!/*depthAICam->*/IsDeviceAvailable()) {
-            g_printerr("Warning: device not available. Start default stream.\n");
-            BuildDefaultPipeline();
-            return;
-        }
+//        if (!/*depthAICam->*/IsDeviceAvailable()) {
+//            g_printerr("Warning: device not available. Start default stream.\n");
+//            BuildDefaultPipeline();
+//            return;
+//        }
 
         bool is_udp_protocol = (mStreamAddress.find("udp://") == 0);
 
@@ -181,11 +181,11 @@ struct DepthAIGStreamer::Impl
         // Source element.
         mAppsrc = gst_element_factory_make("appsrc", "source");
         g_object_set(G_OBJECT(mAppsrc),
-                     //"do-timestamp", true,
+                     "do-timestamp", true,
                      "is-live", true,
-                     //"block", false,
+                     "block", false,
                      "format", "GST_FORMAT_TIME",
-                     //"stream-type", 0,
+                     "stream-type", 0,
                      NULL);
         gst_util_set_object_arg(G_OBJECT(mAppsrc), "format", "GST_FORMAT_TIME");
         // H26x parser. Is this really needed?
@@ -224,31 +224,31 @@ struct DepthAIGStreamer::Impl
         std::transform(profile.begin(), profile.end(), profile.begin(), ::tolower);
         ss << "video/x-" << profile;
         ss >> gstFormat;
-        g_object_set(G_OBJECT(mAppsrc), "caps",
-                     gst_caps_new_simple(gstFormat.c_str(),
-                                         "width", G_TYPE_INT, mEncoderWidth,
-                                         "height", G_TYPE_INT, mEncoderHeight,
-                                         "framerate", GST_TYPE_FRACTION, mEncoderFps, 1,
-                                         NULL), NULL);
+//        g_object_set(G_OBJECT(mAppsrc), "caps",
+//                     gst_caps_new_simple(gstFormat.c_str(),
+//                                         "width", G_TYPE_INT, mEncoderWidth,
+//                                         "height", G_TYPE_INT, mEncoderHeight,
+//                                         "framerate", GST_TYPE_FRACTION, mEncoderFps, 1,
+//                                         NULL), NULL);
 
-        mH26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
-        g_object_set(G_OBJECT(mH26xEncFilter), "caps",
-                     gst_caps_new_simple(gstFormat.c_str(),
-                                         "profile", G_TYPE_STRING, "main",
-                                         "stream-format", G_TYPE_STRING, "byte-stream",
-                                         NULL), NULL);
-
+//        mH26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
+//        g_object_set(G_OBJECT(mH26xEncFilter), "caps",
+//                     gst_caps_new_simple(gstFormat.c_str(),
+//                                         "profile", G_TYPE_STRING, "main",
+//                                         "stream-format", G_TYPE_STRING, "byte-stream",
+//                                         NULL), NULL);
+//
         mBus = gst_pipeline_get_bus(GST_PIPELINE(mPipeline));
         mBusWatchId = gst_bus_add_watch(mBus, StreamEventCallBack, this);
         gst_object_unref(mBus);
         mBus = nullptr;
 
         if (is_udp_protocol) {
-            gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
-            gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
+            gst_bin_add_many(GST_BIN(mPipeline), mAppsrc/*, mH26xEncFilter*/, mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
+            gst_element_link_many(mAppsrc, /*mH26xEncFilter,*/ mH26xparse, mQueue1, mH26xpay, mUdpSink, NULL);
         } else {
-            gst_bin_add_many(GST_BIN(mPipeline), mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
-            gst_element_link_many(mAppsrc, mH26xEncFilter, mH26xparse, mQueue1, mRtspSink, NULL);
+            gst_bin_add_many(GST_BIN(mPipeline), mAppsrc/*, mH26xEncFilter*/, mH26xparse, mQueue1, mRtspSink, NULL);
+            gst_element_link_many(mAppsrc,/* mH26xEncFilter,*/ mH26xparse, mQueue1, mRtspSink, NULL);
         }
 
         sourceid = 0;

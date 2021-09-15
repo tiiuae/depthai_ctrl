@@ -5,6 +5,10 @@ using namespace depthai_ctrl;
 using std::placeholders::_1;
 using Profile = dai::VideoEncoderProperties::Profile;
 
+using std::chrono::duration_cast;
+using std::chrono::seconds;
+using std::chrono::nanoseconds;
+
 void DepthAICamera::Initialize()
 {
     RCLCPP_INFO(this->get_logger(), "[%s]: Initializing...", this->get_name());
@@ -153,6 +157,7 @@ void DepthAICamera::TryRestarting()
     // Setup Color Camera
     colorCamera->setBoardSocket(dai::CameraBoardSocket::RGB);
     colorCamera->setResolution(dai::ColorCameraProperties::SensorResolution::THE_4_K);
+    // Preview resolution cannot be larger than Video's, thus resolution color camera image is limited
     colorCamera->setPreviewSize(_videoWidth, _videoHeight);
     colorCamera->setVideoSize(_videoWidth, _videoHeight);
     colorCamera->setFps(float(_videoFps));
@@ -205,43 +210,42 @@ void DepthAICamera::ProcessingThread()
         {
             auto image = ConvertImage(leftPtr, _left_camera_frame);
             _left_publisher->publish(*image);
-            //RCLCPP_INFO(get_logger(), "LEFT");
         }
         if (rightPtr != nullptr)
         {
             auto image = ConvertImage(rightPtr, _right_camera_frame);
             _right_publisher->publish(*image);
-            //RCLCPP_INFO(get_logger(), "RIGHT");
         }
         if (colorPtr != nullptr)
         {
             auto image = ConvertImage(colorPtr, _color_camera_frame);
             _color_publisher->publish(*image);
-            //RCLCPP_INFO(get_logger(), "COLOR");
         }
         if (videoPtr != nullptr)
         {
+            const auto stamp = videoPtr->getTimestamp();
+            const int32_t sec = duration_cast<seconds>(stamp.time_since_epoch()).count();
+            const int32_t nsec = duration_cast<nanoseconds>(stamp.time_since_epoch()).count() % 1000000000UL;
+
             CompressedImageMsg video_stream_chunk{};
             video_stream_chunk.header.frame_id = _color_camera_frame;
+            video_stream_chunk.header.stamp = rclcpp::Time(sec, nsec, RCL_STEADY_TIME);
             video_stream_chunk.data.swap(videoPtr->getData());
             video_stream_chunk.format = _videoH265 ? "H265" : "H264";
             _video_publisher->publish(video_stream_chunk);
-            //RCLCPP_INFO(get_logger(), "VIDEO");
         }
     }
 }
 
 std::shared_ptr<DepthAICamera::ImageMsg> DepthAICamera::ConvertImage(const std::shared_ptr<dai::ImgFrame> input,
-                                                                     const std::string frame_id)
+                                                                     const std::string& frame_id)
 {
     auto message = std::make_shared<ImageMsg>();
+    const auto stamp = input->getTimestamp();
+    const int32_t sec = duration_cast<seconds>(stamp.time_since_epoch()).count();
+    const int32_t nsec = duration_cast<nanoseconds>(stamp.time_since_epoch()).count() % 1000000000UL;
 
-    auto tstamp = input->getTimestamp();
-    int32_t sec = std::chrono::duration_cast<std::chrono::seconds>(tstamp.time_since_epoch()).count();
-    int32_t nsec =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(tstamp.time_since_epoch()).count() % 1000000000UL;
-
-    message->header.stamp = rclcpp::Time(sec, nsec);
+    message->header.stamp = rclcpp::Time(sec, nsec, RCL_STEADY_TIME);
     message->header.frame_id = frame_id;
 
     if (encodingEnumMap.find(input->getType()) != encodingEnumMap.end())

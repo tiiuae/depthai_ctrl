@@ -17,46 +17,18 @@ class DepthAIGStreamer : public rclcpp::Node
 
     DepthAIGStreamer(int argc, char* argv[]);
     DepthAIGStreamer(const rclcpp::NodeOptions & options);
-
     ~DepthAIGStreamer();
-
-//    void DestroyPipeline();
-//
-//    void BuildDefaultPipeline();
-//
-//    void CreatePipeline();
-
-//    void StopStream();
-
-//    bool IsStreamPlaying();
-
-  protected:
-
-
 
   private:
 
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
     rclcpp::Subscription<CompressedImageMsg>::SharedPtr _video_subscriber;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
     OnSetParametersCallbackHandle::SharedPtr _parameter_setter;
 
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
-
-
     void Initialize();
-
     void GrabVideoMsg(CompressedImageMsg::SharedPtr video_msg);
-
-    //bool IsVideoStreamAvailable();
-
-
-    void SetRclCppError(rcl_interfaces::msg::SetParametersResult& res, std::string msg)
-    {
-        res.successful = false;
-        res.reason = msg;
-        RCLCPP_ERROR(this->get_logger(), "%s", res.reason.c_str());
-    }
 
     bool IsIpAddressValid(const std::string& ip_address);
 
@@ -66,6 +38,12 @@ class DepthAIGStreamer : public rclcpp::Node
 
     void VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg);
 
+    void SetRclCppError(rcl_interfaces::msg::SetParametersResult& res, std::string msg)
+    {
+        res.successful = false;
+        res.reason = msg;
+        RCLCPP_ERROR(this->get_logger(), "%s", res.reason.c_str());
+    }
 };
 
 } // namespace depthai_ctrl

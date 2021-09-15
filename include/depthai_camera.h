@@ -122,7 +122,7 @@ class DepthAICamera : public rclcpp::Node
 
   private:
     void ProcessingThread();
-    std::shared_ptr<ImageMsg> ConvertImage(std::shared_ptr<dai::ImgFrame>, std::string);
+    std::shared_ptr<ImageMsg> ConvertImage(std::shared_ptr<dai::ImgFrame>, const std::string& );
     void Initialize();
     void VideoStreamCommand(std_msgs::msg::String::SharedPtr);
     rcl_interfaces::msg::SetParametersResult SetParameters(const std::vector<rclcpp::Parameter>&);
