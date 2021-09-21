@@ -58,7 +58,7 @@ def generate_launch_description():
                 ],
                 parameters=[
                     #pkg_path + '/config/gstreamer_config.yaml',
-                    {"start_stream_on_boot": False},
+                    {"start_stream_on_boot": True},
                     #{"use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")},
                 ],
             ),

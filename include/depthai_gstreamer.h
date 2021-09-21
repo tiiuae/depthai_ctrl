@@ -19,31 +19,20 @@ class DepthAIGStreamer : public rclcpp::Node
     DepthAIGStreamer(const rclcpp::NodeOptions & options);
     ~DepthAIGStreamer();
 
+    bool isStreamPlaying();
+    bool isStreamDefault();
+
   private:
 
     struct Impl;
     std::unique_ptr<Impl> _impl;
     rclcpp::Subscription<CompressedImageMsg>::SharedPtr _video_subscriber;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
-    OnSetParametersCallbackHandle::SharedPtr _parameter_setter;
 
     void Initialize();
     void GrabVideoMsg(CompressedImageMsg::SharedPtr video_msg);
-
-    bool IsIpAddressValid(const std::string& ip_address);
-
-    void ValidateAddressParameters(const std::string address, rcl_interfaces::msg::SetParametersResult& res);
-
-    rcl_interfaces::msg::SetParametersResult SetParameters(const std::vector<rclcpp::Parameter>& parameters);
-
     void VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg);
 
-    void SetRclCppError(rcl_interfaces::msg::SetParametersResult& res, std::string msg)
-    {
-        res.successful = false;
-        res.reason = msg;
-        RCLCPP_ERROR(this->get_logger(), "%s", res.reason.c_str());
-    }
 };
 
 } // namespace depthai_ctrl

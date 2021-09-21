@@ -1,5 +1,7 @@
 #ifndef FOG_SW_DEPTHAI_CAMERA_H
 #define FOG_SW_DEPTHAI_CAMERA_H
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 #include <depthai/device/Device.hpp>
 #include <depthai/pipeline/datatype/ImgFrame.hpp>
 #include <depthai/pipeline/node/ColorCamera.hpp>
@@ -8,6 +10,8 @@
 #include <depthai/pipeline/node/XLinkIn.hpp>
 #include <depthai/pipeline/node/XLinkOut.hpp>
 #include <depthai/utility/Initialization.hpp>
+//restore compiler switches
+#pragma GCC diagnostic pop
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
@@ -33,6 +37,7 @@ class DepthAICamera : public rclcpp::Node
           _videoFps(25),
           _videoBitrate(3000000),
           _videoH265(false),
+          _processing_thread{},
           _thread_running(false),
           _left_camera_frame("left_camera_frame"),
           _right_camera_frame("right_camera_frame"),
@@ -74,7 +79,6 @@ class DepthAICamera : public rclcpp::Node
             {
                 _processing_thread.join();
             }
-
         }
         if (bool(_device))
         {
@@ -84,48 +88,11 @@ class DepthAICamera : public rclcpp::Node
 
     void TryRestarting();
 
-
-    bool ValidateParameters(int width, int height, int fps, int bitrate, std::string encoding)
-    {
-        if (width > 3840 || width % 8 != 0)
-        {
-            RCLCPP_ERROR(this->get_logger(), "[%s]: Required video stream parameter 'width' is incorrect.", this->get_name());
-            return false;
-        }
-        if (height > 2160 || height % 8 != 0)
-        {
-            RCLCPP_ERROR(this->get_logger(), "[%s]: Required video stream parameter 'height' is incorrect.", this->get_name());
-            return false;
-        }
-
-        if (fps < 5 || fps > 60)
-        {
-            RCLCPP_ERROR(this->get_logger(), "[%s]: Required video stream parameter 'height' is incorrect.", this->get_name());
-            return false;
-        }
-
-        if (bitrate < 400000)
-        {
-            RCLCPP_ERROR(this->get_logger(), "[%s]: Required video stream parameter 'bitrate' is incorrect.", this->get_name());
-            return false;
-        }
-
-        std::transform(encoding.begin(), encoding.end(), encoding.begin(), ::toupper);
-        if ((encoding != "H264") && (encoding != "H265"))
-        {
-            RCLCPP_ERROR(this->get_logger(), "[%s]: Required video stream parameter 'encoding' is incorrect.", this->get_name());
-            return false;
-        }
-        return true;
-    }
-
-
   private:
     void ProcessingThread();
     std::shared_ptr<ImageMsg> ConvertImage(std::shared_ptr<dai::ImgFrame>, const std::string& );
     void Initialize();
     void VideoStreamCommand(std_msgs::msg::String::SharedPtr);
-    rcl_interfaces::msg::SetParametersResult SetParameters(const std::vector<rclcpp::Parameter>&);
 
     std::shared_ptr<dai::Device> _device;
     std::shared_ptr<dai::Pipeline> _pipeline;
@@ -144,8 +111,7 @@ class DepthAICamera : public rclcpp::Node
     std::shared_ptr<rclcpp::Publisher<ImageMsg>> _right_publisher;
     std::shared_ptr<rclcpp::Publisher<ImageMsg>> _color_publisher;
     std::shared_ptr<rclcpp::Publisher<CompressedImageMsg>> _video_publisher;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _video_stream_command_subscriber;
-    OnSetParametersCallbackHandle::SharedPtr _parameters_setter;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
 
     std::thread _processing_thread;
     std::atomic<bool> _thread_running;

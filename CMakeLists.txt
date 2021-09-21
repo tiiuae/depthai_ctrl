@@ -79,16 +79,24 @@ add_dependencies(camera_node depthai_camera)
 add_dependencies(multi_node depthai_gstreamer depthai_camera)
 add_dependencies(gstreamer_node depthai_gstreamer)
 
-# Set some errors
-#if(NOT MSVC)
-#    target_compile_options(depthai_gstreamer PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=return-type>)
-#endif()
 
-# Set compiler features (c++14), and disables extensions (g++)
-#set_property(TARGET depthai_ctrl PROPERTY CXX_STANDARD 14)
-#set_property(TARGET depthai_ctrl PROPERTY CXX_STANDARD_REQUIRED ON)
-#set_property(TARGET depthai_ctrl PROPERTY CXX_EXTENSIONS OFF)
-#
+if (BUILD_TESTING)
+  enable_testing()
+
+  find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest CONFIG REQUIRED)
+
+  ament_add_gtest(depthai_camera_test test/depthai_camera_test.cpp)
+  ament_add_gtest(depthai_gstreamer_test test/depthai_gstreamer_test.cpp)
+
+  ament_target_dependencies(depthai_camera_test rclcpp rclcpp_components)
+  ament_target_dependencies(depthai_gstreamer_test rclcpp rclcpp_components)
+
+  target_link_libraries(depthai_camera_test depthai_camera)
+  target_link_libraries(depthai_gstreamer_test depthai_gstreamer)
+
+
+endif (BUILD_TESTING)
 
 install(TARGETS depthai_camera depthai_gstreamer
         ARCHIVE DESTINATION lib
