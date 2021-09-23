@@ -26,7 +26,9 @@ struct DepthAIGStreamer::Impl
     std::string encoderProfile = "H264";
     std::string streamAddress = "192.168.0.1";
 
-    Impl(int* argc, char** argv[]) { gst_init(argc, argv); }
+
+    Impl(int* argc, char** argv[])
+    { gst_init(argc, argv); }
 
     ~Impl()
     {
@@ -45,57 +47,63 @@ struct DepthAIGStreamer::Impl
 
     void StartStream()
     {
-        const bool is_udp_protocol = (streamAddress.find("udp://") == 0);
-        const std::string h26xparse = (encoderProfile == "H246") ? "h264parse" : "h265parse";
-        const std::string h26xencoder = (encoderProfile == "H246") ? "x264enc" : "x265enc";
-        const std::string gstFormat = (encoderProfile == "H246") ? "video/x-h264" : "video/x-h265";
+        isStreamPlaying = true;
+        gstThread = std::thread(std::bind(DepthAIGStreamer::Impl::GStreamerThread, this));
+    }
+
+    static void GStreamerThread(DepthAIGStreamer::Impl* data)
+    {
+        const bool is_udp_protocol = (data->streamAddress.find("udp://") == 0);
+        const std::string h26xparse = (data->encoderProfile == "H246") ? "h264parse" : "h265parse";
+        const std::string h26xencoder = (data->encoderProfile == "H246") ? "x264enc" : "x265enc";
+        const std::string gstFormat = (data->encoderProfile == "H246") ? "video/x-h264" : "video/x-h265";
         std::string payload = " ";
         std::string sink{};
 
         if (is_udp_protocol)
         {
-            std::string host = DepthAIUtils::ReadIpFromUdpAddress(streamAddress);
-            int port = DepthAIUtils::ReadPortFromUdpAddress(streamAddress);
+            std::string host = DepthAIUtils::ReadIpFromUdpAddress(data->streamAddress);
+            int port = DepthAIUtils::ReadPortFromUdpAddress(data->streamAddress);
 
             sink = "udpsink host=" + host +  " port=" + std::to_string(port) + " ";
-            payload = (encoderProfile == "H246") ? "! rtph264pay " : "! rtph265pay ";
+            payload = (data->encoderProfile == "H246") ? "! rtph264pay " : "! rtph265pay ";
         }
         else
         {
-            sink = "rtspclientsink location=" + streamAddress;
+            sink = "rtspclientsink protocols=tcp tls-validation-flags=0 location=" + data->streamAddress;
         }
 
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
-        if (queue.empty()) // video-data is not available - use "default" video output
+        if (data->queue.empty()) // video-data is not available - use "default" video output
         {
-            isStreamDefault = true;
+            data->isStreamDefault = true;
 
             const std::string pipeline_string = "videotestsrc name=source pattern=chroma-zone-plate "
-                                          "! video/x-raw,format=I420,width=1280,height=720 "
-                                          "! textoverlay text=\"Camera not detected\" valignment=4 halignment=1 font-desc=Sans "
-                                          "! videoconvert ! " + h26xencoder + " speed-preset=2 ! queue "
-                                          + payload + "! " + sink;
+                                                "! video/x-raw,format=I420,width=1280,height=720 "
+                                                "! textoverlay text=\"Camera not detected\" valignment=4 halignment=1 font-desc=Sans "
+                                                "! videoconvert ! " + h26xencoder + " speed-preset=2 ! queue "
+                                                + payload + "! " + sink;
             std::cout << "Starting no-camera pipeline:" << std::endl;
             std::cout << pipeline_string << std::endl;
-            pipeline = gst_parse_launch(pipeline_string.c_str(), NULL);
-            g_assert(pipeline);
+            data->pipeline = gst_parse_launch(pipeline_string.c_str(), NULL);
+            g_assert(data->pipeline);
 
-            gstThread = std::thread(std::bind(DepthAIGStreamer::Impl::GStreamerThread, this));
         }
         else
         {
-            isStreamDefault = false;
+            data->isStreamDefault = false;
 
             const std::string pipeline_string = "appsrc name=source ! h264parse " + payload + "! " + sink;
             std::cout << "Starting pipeline:" << std::endl;
             std::cout << pipeline_string << std::endl;
-            pipeline = gst_parse_launch(pipeline_string.c_str(), NULL);
-            g_assert(pipeline);
-            appSource = gst_bin_get_by_name(GST_BIN(pipeline), "source");
-            g_assert(appSource);
-            g_assert(GST_IS_APP_SRC(appSource));
+            data->pipeline = gst_parse_launch(pipeline_string.c_str(), NULL);
+            g_assert(data->pipeline);
+            data->appSource = gst_bin_get_by_name(GST_BIN(data->pipeline), "source");
+            g_assert(data->appSource);
+            g_assert(GST_IS_APP_SRC(data->appSource));
 
-            g_object_set(G_OBJECT(appSource),
+            g_object_set(G_OBJECT(data->appSource),
                          "stream-type",
                          0,
                          "is-live",
@@ -106,12 +114,8 @@ struct DepthAIGStreamer::Impl
                          GST_FORMAT_TIME,
                          nullptr);
 
-            gstThread = std::thread(std::bind(DepthAIGStreamer::Impl::GStreamerThread, this));
         }
-    }
 
-    static void GStreamerThread(DepthAIGStreamer::Impl* data)
-    {
         const auto status = gst_element_set_state(data->pipeline, GST_STATE_PLAYING);
         std::cout << "GStreamerThread: Pipeline Change State Status: " << std::to_string(status) << std::endl;
 
@@ -176,7 +180,6 @@ DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions& options)
 }
 
 bool DepthAIGStreamer::isStreamPlaying() { return _impl->isStreamPlaying;}
-bool DepthAIGStreamer::isStreamDefault() { return _impl->isStreamDefault;}
 
 void DepthAIGStreamer::Initialize()
 {
@@ -265,8 +268,6 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
     }
     _impl->queueMutex.unlock();
 }
-
-
 
 void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg)
 {
