@@ -26,7 +26,7 @@ class DepthAIGStreamerTest : public ::testing::Test
     DepthAIGStreamerTest() = default;
 
   protected:
-    static void client_connected_handler(GstRTSPServer* server, GstRTSPClient* client, gpointer user_data)
+    static void client_connected_handler(GstRTSPServer*, GstRTSPClient*, gpointer)
     {
         std::cout << "Client Connection Detected!" << std::endl;
         connection_detected = true;
@@ -90,14 +90,14 @@ TEST_F(DepthAIGStreamerTest, BasicTest)
 {
     rclcpp::NodeOptions options{};
     std::shared_ptr<depthai_ctrl::DepthAIGStreamer> gstreamer_node;
-    EXPECT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
+    ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
     auto video_publisher = rclcpp::create_publisher<CompressedImageMsg>(
         *gstreamer_node, "camera/color/video", rclcpp::SystemDefaultsQoS());
     EXPECT_EQ(1UL, video_publisher->get_subscription_count());
 
     EXPECT_FALSE(gstreamer_node->isStreamPlaying());
-    EXPECT_NO_THROW(gstreamer_node.reset());
+    ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
 /// StartOnBoot enabled, but still not connected -> expect no gst pipeline crush, isStreamPlaying == true
@@ -108,7 +108,7 @@ TEST_F(DepthAIGStreamerTest, BasicStartOnBootTest)
 
     std::vector<rclcpp::Parameter>& parameters = options.parameter_overrides();
     parameters.push_back({"start_stream_on_boot", true});
-    EXPECT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
+    ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
     auto video_publisher = rclcpp::create_publisher<CompressedImageMsg>(
         *gstreamer_node, "camera/color/video", rclcpp::SystemDefaultsQoS());
@@ -120,14 +120,14 @@ TEST_F(DepthAIGStreamerTest, BasicStartOnBootTest)
     // we play "default" stream, as no real camera connected
     std::this_thread::sleep_for(std::chrono::seconds(3));
     EXPECT_TRUE(gstreamer_node->isStreamDefault());
-    EXPECT_NO_THROW(gstreamer_node.reset());
+    ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
 /// Check if test RTSP server starts and stops without problems
 TEST_F(DepthAIGStreamerTest, InternalTest)
 {
-    EXPECT_NO_THROW(StartServer());
-    EXPECT_NO_THROW(StopServer());
+    ASSERT_NO_THROW(StartServer());
+    ASSERT_NO_THROW(StopServer());
     EXPECT_FALSE(connection_detected);
 }
 
@@ -135,7 +135,7 @@ TEST_F(DepthAIGStreamerTest, InternalTest)
 /// it will play "default" stream
  TEST_F(DepthAIGStreamerTest, StartOnBootDefaultStreamTest)
 {
-    EXPECT_NO_THROW(StartServer());
+    ASSERT_NO_THROW(StartServer());
 
     rclcpp::NodeOptions options{};
     std::shared_ptr<depthai_ctrl::DepthAIGStreamer> gstreamer_node;
@@ -144,7 +144,7 @@ TEST_F(DepthAIGStreamerTest, InternalTest)
     parameters.push_back({"start_stream_on_boot", true});
     parameters.push_back({"address", "rtsp://127.0.0.1:8554/test"});
 
-    EXPECT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
+    ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
     EXPECT_TRUE(gstreamer_node->isStreamPlaying());
 
@@ -157,13 +157,13 @@ TEST_F(DepthAIGStreamerTest, InternalTest)
     EXPECT_NO_THROW(StopServer());
 
     EXPECT_TRUE(connection_detected);
-    EXPECT_NO_THROW(gstreamer_node.reset());
+    ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
 /// Start without start_on_boot, then send a "start" command through ROS message
 TEST_F(DepthAIGStreamerTest, DelayedStartTest)
 {
-    EXPECT_NO_THROW(StartServer());
+    ASSERT_NO_THROW(StartServer());
 
     rclcpp::NodeOptions options{};
     std::shared_ptr<depthai_ctrl::DepthAIGStreamer> gstreamer_node;
@@ -172,10 +172,7 @@ TEST_F(DepthAIGStreamerTest, DelayedStartTest)
     parameters.push_back({"start_stream_on_boot", false});
     parameters.push_back({"address", "rtsp://127.0.0.1:8554/test"});
 
-    EXPECT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
-
-    // give it a time to initialize
-    rclcpp::spin_some(gstreamer_node);
+    ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
     EXPECT_FALSE(connection_detected); // GStreamer have not tried to connected
     EXPECT_FALSE(gstreamer_node->isStreamPlaying());
@@ -189,7 +186,9 @@ TEST_F(DepthAIGStreamerTest, DelayedStartTest)
     command.data = R"({"Command": "start"})";
     command_publisher->publish(command);
 
-    // let GFStreamer to process command
+    // this delay is essential for message passing (o_O)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // let GFStreamerNode to process command
     rclcpp::spin_some(gstreamer_node);
 
     // give it a time to initialize a stream
@@ -201,5 +200,5 @@ TEST_F(DepthAIGStreamerTest, DelayedStartTest)
     EXPECT_TRUE(gstreamer_node->isStreamDefault());
     EXPECT_NO_THROW(StopServer());
 
-    EXPECT_NO_THROW(gstreamer_node.reset());
+    ASSERT_NO_THROW(gstreamer_node.reset());
 }

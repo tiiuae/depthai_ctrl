@@ -40,7 +40,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 find_package(nlohmann_json REQUIRED)
 
-include_directories(${GST_INCLUDE_DIRS})
+include_directories(SYSTEM ${GST_INCLUDE_DIRS})
 include_directories(include)
 link_directories(${GST_LIBRARY_DIRS})
 
