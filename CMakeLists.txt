@@ -1,10 +1,15 @@
 cmake_minimum_required(VERSION 3.5)
 
-# Add depthai-core dependency
-#add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core EXCLUDE_FROM_ALL)
+# all these settings are needed to properly compile depthai-core as subdirectory
+set(BUILD_SHARED_LIBS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
+add_definitions(-DSPDLOG_HEADER_ONLY=1)
+add_definitions(-DFMT_HEADER_ONLY=1)
+set(HUNTER_CONFIGURATION_TYPES ${CMAKE_BUILD_TYPE}) # makes possible to compile also Debug build
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core ${CMAKE_CURRENT_BINARY_DIR}/depthai-core EXCLUDE_FROM_ALL)
 
-project(depthai_ctrl_sub)
+project(depthai_ctrl)
 
 # pkg-config configurations path.
 if(NOT DEFINED ENV{PKG_CONFIG_PATH})
@@ -26,32 +31,85 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 )
 endif()
 
-find_package(ament_cmake REQUIRED)
+#find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_components REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 find_package(nlohmann_json REQUIRED)
 
 include_directories(${GST_INCLUDE_DIRS})
+include_directories(include)
 link_directories(${GST_LIBRARY_DIRS})
 
-add_executable(depthai_ctrl depthai_ctrl.cpp)
-ament_target_dependencies(depthai_ctrl rclcpp std_msgs)
+# DepthAI Camera as Component library
+add_library(depthai_camera SHARED src/depthai_camera.cpp)
+ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs)
+target_link_libraries(depthai_camera PUBLIC depthai-core)
 
-# Link with libraries
-target_link_libraries(depthai_ctrl depthai-core)
-target_link_libraries(depthai_ctrl ${GST_LIBRARIES})
-target_link_libraries(depthai_ctrl nlohmann_json::nlohmann_json)
 
-# Set some errors
-if(NOT MSVC)
-    target_compile_options(depthai_ctrl PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=return-type>)
-endif()
+# DepthAI Camera as separate node
+add_executable(camera_node src/camera_node.cpp)
+ament_target_dependencies(camera_node PUBLIC rclcpp rclcpp_components)
+target_link_libraries(camera_node PUBLIC depthai_camera)
 
-# Set compiler features (c++14), and disables extensions (g++)
-set_property(TARGET depthai_ctrl PROPERTY CXX_STANDARD 14)
-set_property(TARGET depthai_ctrl PROPERTY CXX_STANDARD_REQUIRED ON)
-set_property(TARGET depthai_ctrl PROPERTY CXX_EXTENSIONS OFF)
 
-install(TARGETS depthai_ctrl)
+# DepthAI GStreamer as Component library
+add_library(depthai_gstreamer SHARED src/depthai_gstreamer.cpp)
+ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs)
+target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0)
+
+# DepthAI GStreamer as separate node
+add_executable(gstreamer_node src/gstreamer_node.cpp)
+ament_target_dependencies(gstreamer_node PUBLIC rclcpp rclcpp_components)
+target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
+
+rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
+rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
+
+# Combined DepthAI node
+add_executable(multi_node src/multi_node.cpp)
+ament_target_dependencies(multi_node PUBLIC rclcpp rclcpp_components)
+target_link_libraries(multi_node PUBLIC depthai_camera depthai_gstreamer)
+
+# Explicitly force to re-compile binary whenever library changed
+add_dependencies(camera_node depthai_camera)
+add_dependencies(multi_node depthai_gstreamer depthai_camera)
+add_dependencies(gstreamer_node depthai_gstreamer)
+
+
+if (BUILD_TESTING)
+  enable_testing()
+
+  find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest CONFIG REQUIRED)
+
+  ament_add_gtest(depthai_camera_test test/depthai_camera_test.cpp)
+  ament_add_gtest(depthai_gstreamer_test test/depthai_gstreamer_test.cpp)
+
+  ament_target_dependencies(depthai_camera_test rclcpp rclcpp_components)
+  ament_target_dependencies(depthai_gstreamer_test rclcpp rclcpp_components)
+
+  target_link_libraries(depthai_camera_test depthai_camera)
+  target_link_libraries(depthai_gstreamer_test depthai_gstreamer)
+
+
+endif (BUILD_TESTING)
+
+install(TARGETS depthai_camera depthai_gstreamer
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin)
+
+install(TARGETS
+        camera_node gstreamer_node multi_node
+        DESTINATION lib/${PROJECT_NAME})
+
+
+install(DIRECTORY launch
+        DESTINATION share/${PROJECT_NAME}
+        )
+
+ament_package()
