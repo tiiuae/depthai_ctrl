@@ -22,7 +22,6 @@ jobs:
         with:
           repository: tiiuae/fogsw-ci-scripts
           path: fogsw-ci-scripts
-          ref: add_rtsp_server_4_depthai
 
       # Run docker build
       - name: Run fog-sw docker build
