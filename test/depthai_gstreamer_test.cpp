@@ -85,6 +85,76 @@ class DepthAIGStreamerTest : public ::testing::Test
     GMainLoop* _loop{nullptr};
 };
 
+/// Internal test to check if our "test environment" (which could be inside Docker) works with the GStreamer.
+/// It fails if some essential GST plugins or ENV variables are missing.
+TEST(InternalTest, SimulateGstPipeline)
+{
+    std::atomic<bool> gst_running{true};
+    std::thread gst_thread = std::thread([&] {
+        const std::string pipeline_string =
+            "videotestsrc name=source pattern=chroma-zone-plate ! queue ! videoconvert ! x264enc ! rtspclientsink "
+            "location=127.0.0.1:3554";
+        GError* parse_error = nullptr;
+        auto pipeline = gst_parse_launch(pipeline_string.c_str(), &parse_error);
+
+        if (parse_error != nullptr)
+        {
+            std::cerr << "Gst Parse Error " << parse_error->code << ": " << parse_error->message << std::endl;
+            g_clear_error(&parse_error);
+            parse_error = nullptr;
+        }
+
+        ASSERT_EQ(parse_error, nullptr);
+        ASSERT_NE(pipeline, nullptr);
+
+        const auto status1 = gst_element_set_state(pipeline, GST_STATE_PAUSED);
+        EXPECT_EQ(status1, 1);
+        if (status1 != 1)
+        {
+            std::cerr << "Leaving the thread #1" << std::endl;
+            gst_element_set_state(pipeline, GST_STATE_NULL);
+            gst_object_unref(pipeline);
+            return;
+        }
+
+        const auto status2 = gst_element_set_state(pipeline, GST_STATE_PLAYING);
+        ASSERT_EQ(status2, 1);
+        if (status2 != 1)
+        {
+            std::cerr << "Leaving the thread #2" << std::endl;
+            gst_element_set_state(pipeline, GST_STATE_NULL);
+            gst_object_unref(pipeline);
+            return;
+        }
+
+        while (gst_running)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        std::cerr << "Leaving the thread #3" << std::endl;
+        gst_element_set_state(pipeline, GST_STATE_NULL);
+        gst_object_unref(pipeline);
+    });
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    gst_running = false;
+    if (gst_thread.joinable())
+    {
+        std::cerr << "Try to join GST thread" << std::endl;
+        ASSERT_NO_THROW(gst_thread.join());
+    }
+}
+
+/// Check if test RTSP server starts and stops without problems
+TEST_F(DepthAIGStreamerTest, InternalTest2)
+{
+    ASSERT_NO_THROW(StartServer());
+    ASSERT_NO_THROW(StopServer());
+    EXPECT_FALSE(connection_detected);
+}
+
 /// Creates GStreamerNode, stream is not started / not connected
 TEST_F(DepthAIGStreamerTest, BasicTest)
 {
@@ -123,17 +193,9 @@ TEST_F(DepthAIGStreamerTest, BasicStartOnBootTest)
     ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
-/// Check if test RTSP server starts and stops without problems
-TEST_F(DepthAIGStreamerTest, InternalTest)
-{
-    ASSERT_NO_THROW(StartServer());
-    ASSERT_NO_THROW(StopServer());
-    EXPECT_FALSE(connection_detected);
-}
-
 /// Check if we may connect GStreamerNode to local test rtsp server
 /// it will play "default" stream
- TEST_F(DepthAIGStreamerTest, StartOnBootDefaultStreamTest)
+TEST_F(DepthAIGStreamerTest, StartOnBootDefaultStreamTest)
 {
     ASSERT_NO_THROW(StartServer());
 
@@ -152,7 +214,7 @@ TEST_F(DepthAIGStreamerTest, InternalTest)
     rclcpp::spin_some(gstreamer_node);
     std::this_thread::sleep_for(std::chrono::seconds(3));
 
-    // make sure stream is "default"
+    // make sure the stream is "default"
     EXPECT_TRUE(gstreamer_node->isStreamDefault());
     EXPECT_NO_THROW(StopServer());
 
@@ -174,7 +236,7 @@ TEST_F(DepthAIGStreamerTest, DelayedStartTest)
 
     ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
-    EXPECT_FALSE(connection_detected); // GStreamer have not tried to connected
+    EXPECT_FALSE(connection_detected);  // GStreamer have not tried to connected
     EXPECT_FALSE(gstreamer_node->isStreamPlaying());
 
     // prepare and send a command
@@ -188,7 +250,7 @@ TEST_F(DepthAIGStreamerTest, DelayedStartTest)
 
     // this delay is essential for message passing (o_O)
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    // let GFStreamerNode to process command
+    // let GStreamerNode to process command
     rclcpp::spin_some(gstreamer_node);
 
     // give it a time to initialize a stream
@@ -196,7 +258,7 @@ TEST_F(DepthAIGStreamerTest, DelayedStartTest)
     EXPECT_TRUE(connection_detected);
     EXPECT_TRUE(gstreamer_node->isStreamPlaying());
 
-    // make sure stream is "default"
+    // make sure the stream is "default"
     EXPECT_TRUE(gstreamer_node->isStreamDefault());
     EXPECT_NO_THROW(StopServer());
 

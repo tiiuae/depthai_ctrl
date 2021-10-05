@@ -95,6 +95,8 @@ struct DepthAIGStreamer::Impl
                 std::cerr << "Gst Parse Error " << parse_error->code << ": " <<  parse_error->message << std::endl;
                 g_clear_error(&parse_error);
                 parse_error = nullptr;
+                data->isStreamPlaying = false;
+                return;
             }
             g_assert(data->pipeline);
         }
@@ -105,7 +107,16 @@ struct DepthAIGStreamer::Impl
             const std::string pipeline_string = "appsrc name=source ! h264parse " + payload + "! " + sink;
             std::cout << "Starting pipeline:" << std::endl;
             std::cout << pipeline_string << std::endl;
-            data->pipeline = gst_parse_launch(pipeline_string.c_str(), NULL);
+            GError* parse_error = nullptr;
+            data->pipeline = gst_parse_launch(pipeline_string.c_str(), &parse_error);
+            if(parse_error != nullptr)
+            {
+                std::cerr << "Gst Parse Error " << parse_error->code << ": " <<  parse_error->message << std::endl;
+                g_clear_error(&parse_error);
+                parse_error = nullptr;
+                data->isStreamPlaying = false;
+                return;
+            }
             g_assert(data->pipeline);
             data->appSource = gst_bin_get_by_name(GST_BIN(data->pipeline), "source");
             g_assert(data->appSource);
