@@ -40,7 +40,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 find_package(nlohmann_json REQUIRED)
 
-include_directories(${GST_INCLUDE_DIRS})
+include_directories(SYSTEM ${GST_INCLUDE_DIRS})
 include_directories(include)
 link_directories(${GST_LIBRARY_DIRS})
 
@@ -66,9 +66,6 @@ add_executable(gstreamer_node src/gstreamer_node.cpp)
 ament_target_dependencies(gstreamer_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
 
-rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
-rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
-
 # Combined DepthAI node
 add_executable(multi_node src/multi_node.cpp)
 ament_target_dependencies(multi_node PUBLIC rclcpp rclcpp_components)
@@ -79,6 +76,9 @@ add_dependencies(camera_node depthai_camera)
 add_dependencies(multi_node depthai_gstreamer depthai_camera)
 add_dependencies(gstreamer_node depthai_gstreamer)
 
+rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
+rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
+
 
 if (BUILD_TESTING)
   enable_testing()
@@ -86,16 +86,20 @@ if (BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest CONFIG REQUIRED)
 
-  ament_add_gtest(depthai_camera_test test/depthai_camera_test.cpp)
-  ament_add_gtest(depthai_gstreamer_test test/depthai_gstreamer_test.cpp)
+  add_executable(depthai_camera_test test/depthai_camera_test.cpp)
+  add_executable(depthai_gstreamer_test test/depthai_gstreamer_test.cpp)
 
   ament_target_dependencies(depthai_camera_test rclcpp rclcpp_components)
-  ament_target_dependencies(depthai_gstreamer_test rclcpp rclcpp_components)
+  ament_target_dependencies(depthai_gstreamer_test PUBLIC rclcpp rclcpp_components)
 
-  target_link_libraries(depthai_camera_test depthai_camera)
-  target_link_libraries(depthai_gstreamer_test depthai_gstreamer)
+  target_link_libraries(depthai_camera_test depthai_camera gtest)
+  target_link_libraries(depthai_gstreamer_test PUBLIC depthai_gstreamer ${GST_LIBRARIES} gstapp-1.0 gstrtspserver-1.0 gtest)
 
+  add_dependencies(depthai_camera_test depthai_camera)
+  add_dependencies(depthai_gstreamer_test depthai_gstreamer)
 
+  add_test(depthai_camera_test depthai_camera_test)
+  add_test(depthai_gstreamer_test depthai_gstreamer_test)
 endif (BUILD_TESTING)
 
 install(TARGETS depthai_camera depthai_gstreamer
