@@ -104,7 +104,7 @@ struct DepthAIGStreamer::Impl
         {
             data->isStreamDefault = false;
 
-            const std::string pipeline_string = "appsrc name=source ! h264parse " + payload + "! " + sink;
+            const std::string pipeline_string = "appsrc name=source ! queue ! h264parse " + payload + "! " + sink;
             std::cout << "Starting pipeline:" << std::endl;
             std::cout << pipeline_string << std::endl;
             GError* parse_error = nullptr;
@@ -137,6 +137,7 @@ struct DepthAIGStreamer::Impl
         const auto status = gst_element_set_state(data->pipeline, GST_STATE_PLAYING);
         std::cout << "GStreamerThread: Pipeline Change State Status: " << std::to_string(status) << std::endl;
 
+        uint64_t frame_count = 0;
         while (data->isStreamPlaying)
         {
             if (!data->queue.empty() && !data->isStreamDefault)
@@ -161,8 +162,26 @@ struct DepthAIGStreamer::Impl
                 GST_BUFFER_PTS(buffer) = local_stamp;
 
                 const auto result = ::gst_app_src_push_buffer(GST_APP_SRC(data->appSource), buffer);
-                std::cout << "Submitted: " << gst_stamp << " local=" << local_stamp << ": " << std::to_string(result)
-                          << std::endl;
+
+                GstState current_state;
+                gst_element_get_state(data->pipeline, &current_state, nullptr, 0);
+
+                if(result != GST_FLOW_OK || current_state != GST_STATE_PLAYING || frame_count < 10 || frame_count % 100 == 0)
+                {
+                    std::cout << "Submitted to Appsrc # " << frame_count
+                            << ": device time=" << gst_stamp
+                            << ", gst time=" << local_stamp << "; result: "
+                            << std::to_string(result);
+
+                    std::cout << " Pipeline State: " << current_state;
+
+                    if (result != GST_FLOW_OK)
+                    {
+                        std::cout << " (NOT OK)";
+                    }
+                    std::cout << std::endl;
+                }
+                frame_count ++;
             }
             else
             {
@@ -280,8 +299,16 @@ void DepthAIGStreamer::Initialize()
 
 void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
+    static uint64_t frame_count = 0UL;
     const auto stamp = video_msg->header.stamp;
-    RCLCPP_INFO(get_logger(), "RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec));
+
+    if(frame_count < 10 || frame_count % 100 == 0)
+    {
+        RCLCPP_INFO(get_logger(), "Received video-chunk #%d at time: %d.%09d sec ", frame_count, stamp.sec, stamp.nanosec);
+    }
+
+    frame_count ++;
+
     _impl->queueMutex.lock();
     _impl->queue.push(video_msg);
     // When message queue is too big - delete old messages
