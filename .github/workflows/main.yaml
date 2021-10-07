@@ -22,7 +22,6 @@ jobs:
         with:
           repository: tiiuae/fogsw-ci-scripts
           path: fogsw-ci-scripts
-          ref: add_gstreamer_deps_plus_mandatory_tests
 
       # Run docker build
       - name: Run fog-sw docker build
