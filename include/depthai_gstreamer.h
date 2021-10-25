@@ -19,8 +19,9 @@ class DepthAIGStreamer : public rclcpp::Node
     DepthAIGStreamer(const rclcpp::NodeOptions & options);
     ~DepthAIGStreamer();
 
-    bool isStreamPlaying();
-    bool isStreamDefault();
+    bool IsStreamPlaying();
+    bool IsStreamDefault();
+    bool IsErrorDetected();
 
   private:
 

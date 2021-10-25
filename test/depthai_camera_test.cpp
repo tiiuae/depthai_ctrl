@@ -37,6 +37,57 @@ TEST(DepthAICameraTest, BasicTest)
     EXPECT_EQ(1UL, right_subscriber->get_publisher_count());
     EXPECT_EQ(1UL, color_subscriber->get_publisher_count());
     EXPECT_EQ(1UL, video_subscriber->get_publisher_count());
+    EXPECT_NO_THROW(camera_node->Stop());
+    EXPECT_NO_THROW(camera_node->TryRestarting());
+    EXPECT_FALSE(camera_node->IsNodeRunning());
 
     EXPECT_NO_THROW(camera_node.reset());
 }
+
+
+/// Creates GStreamerCamera with NodeOptions constructor
+TEST(DepthAICameraTest, CorrectVideoComandTest)
+{
+    rclcpp::NodeOptions options{};
+    std::shared_ptr<depthai_ctrl::DepthAICamera> camera_node;
+    EXPECT_NO_THROW(camera_node = std::make_shared<depthai_ctrl::DepthAICamera>(options));
+
+    // prepare and send a command
+    auto command_publisher = rclcpp::create_publisher<std_msgs::msg::String>(
+        *camera_node, "/videostreamcmd", rclcpp::SystemDefaultsQoS());
+
+    ASSERT_EQ(command_publisher->get_subscription_count(), 1);
+    std_msgs::msg::String command{};
+    command.data = R"({"Command": "start"})";
+    command_publisher->publish(command);
+
+    // this delay is essential for message passing (o_O)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    rclcpp::spin_some(camera_node);
+
+    EXPECT_NO_THROW(camera_node.reset());
+}
+
+/// Creates GStreamerCamera with NodeOptions constructor
+TEST(DepthAICameraTest, WrongVideoComandTest)
+{
+    rclcpp::NodeOptions options{};
+    std::shared_ptr<depthai_ctrl::DepthAICamera> camera_node;
+    EXPECT_NO_THROW(camera_node = std::make_shared<depthai_ctrl::DepthAICamera>(options));
+
+    // prepare and send a command
+    auto command_publisher = rclcpp::create_publisher<std_msgs::msg::String>(
+        *camera_node, "/videostreamcmd", rclcpp::SystemDefaultsQoS());
+
+    ASSERT_EQ(command_publisher->get_subscription_count(), 1);
+    std_msgs::msg::String command{};
+    command.data = R"(qsdfghjk})";
+    command_publisher->publish(command);
+
+    // this delay is essential for message passing (o_O)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    rclcpp::spin_some(camera_node);
+
+    EXPECT_NO_THROW(camera_node.reset());
+}
+

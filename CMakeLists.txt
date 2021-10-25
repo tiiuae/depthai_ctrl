@@ -67,14 +67,14 @@ ament_target_dependencies(gstreamer_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
 
 # Combined DepthAI node
-add_executable(multi_node src/multi_node.cpp)
-ament_target_dependencies(multi_node PUBLIC rclcpp rclcpp_components)
-target_link_libraries(multi_node PUBLIC depthai_camera depthai_gstreamer)
+add_executable(depthai_ctrl src/depthai_ctrl.cpp)
+ament_target_dependencies(depthai_ctrl PUBLIC rclcpp rclcpp_components)
+target_link_libraries(depthai_ctrl PUBLIC depthai_camera depthai_gstreamer)
 
 # Explicitly force to re-compile binary whenever library changed
 add_dependencies(camera_node depthai_camera)
-add_dependencies(multi_node depthai_gstreamer depthai_camera)
 add_dependencies(gstreamer_node depthai_gstreamer)
+add_dependencies(depthai_ctrl depthai_gstreamer depthai_camera)
 
 rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
 rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
@@ -92,14 +92,32 @@ if (BUILD_TESTING)
   ament_target_dependencies(depthai_camera_test rclcpp rclcpp_components)
   ament_target_dependencies(depthai_gstreamer_test PUBLIC rclcpp rclcpp_components)
 
-  target_link_libraries(depthai_camera_test depthai_camera gtest)
-  target_link_libraries(depthai_gstreamer_test PUBLIC depthai_gstreamer ${GST_LIBRARIES} gstapp-1.0 gstrtspserver-1.0 gtest)
+  target_link_libraries(depthai_camera_test depthai_camera gtest pthread)
+  target_link_libraries(depthai_gstreamer_test PUBLIC depthai_gstreamer ${GST_LIBRARIES} gstapp-1.0 gstrtspserver-1.0 gtest pthread)
 
   add_dependencies(depthai_camera_test depthai_camera)
   add_dependencies(depthai_gstreamer_test depthai_gstreamer)
 
   add_test(depthai_camera_test depthai_camera_test)
   add_test(depthai_gstreamer_test depthai_gstreamer_test)
+
+  option(CODE_COVERAGE "Setup code-coverage test targets" FALSE)
+
+  if(CODE_COVERAGE)
+    set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/test)
+    include(CodeCoverage)
+    append_coverage_compiler_flags()
+
+    setup_target_for_coverage_gcovr_html(
+      NAME depthai_coverage
+      EXECUTABLE ctest --verbose
+      DEPENDENCIES depthai_camera_test depthai_gstreamer_test
+      BASE_DIRECTORY "src"
+      #EXCLUDE "dir2/*"
+    )
+
+
+  endif (CODE_COVERAGE)
 endif (BUILD_TESTING)
 
 install(TARGETS depthai_camera depthai_gstreamer
@@ -107,9 +125,7 @@ install(TARGETS depthai_camera depthai_gstreamer
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)
 
-install(TARGETS
-        camera_node gstreamer_node multi_node
-        DESTINATION lib/${PROJECT_NAME})
+install(TARGETS camera_node gstreamer_node depthai_ctrl )
 
 
 install(DIRECTORY launch

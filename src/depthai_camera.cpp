@@ -50,7 +50,17 @@ void DepthAICamera::Initialize()
 
 void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
 {
-    auto cmd = nlohmann::json::parse(msg->data.c_str());
+    nlohmann::json cmd{};
+    try
+    {
+        cmd = nlohmann::json::parse(msg->data.c_str());
+    }
+    catch(...)
+    {
+        RCLCPP_ERROR(this->get_logger(), "Error while parsing JSON string from VideoCommand");
+        return;
+    }
+
     if (!cmd["Command"].empty())
     {
         std::string command = cmd["Command"];
@@ -142,7 +152,7 @@ void DepthAICamera::TryRestarting()
     colorCamera->setVideoSize(_videoWidth, _videoHeight);
     colorCamera->setFps(float(_videoFps));
     videoEncoder->setBitrate(_videoBitrate);
-    Profile encoding = _videoH265 ? Profile::H265_MAIN : Profile::H264_MAIN;
+    Profile encoding = _videoH265 ? Profile::H265_MAIN : Profile::H264_BASELINE;
     videoEncoder->setDefaultProfilePreset(_videoWidth, _videoHeight, static_cast<float>(_videoFps), encoding);
 
     colorCamera->video.link(videoEncoder->input);
@@ -156,14 +166,20 @@ void DepthAICamera::TryRestarting()
     xoutColor->setStreamName("color");
     xoutVideo->setStreamName("video");
 
-    try
+    for(int i=0; i<3 && !_device; i++)
     {
-        _device = std::make_shared<dai::Device>(*_pipeline, true);
+        try
+        {
+            _device = std::make_shared<dai::Device>(*_pipeline, true);
+        }
+        catch (const std::runtime_error& err)
+        {
+            RCLCPP_ERROR(get_logger(), "Cannot start DepthAI camera: " + std::string(err.what()));
+            _device.reset();
+        }
     }
-    catch (const std::runtime_error& err)
+    if(!_device)
     {
-        RCLCPP_ERROR(get_logger(), "Cannot start DepthAI camera: " + std::string(err.what()));
-        _device.reset();
         return;
     }
 
@@ -178,6 +194,7 @@ void DepthAICamera::TryRestarting()
 
 void DepthAICamera::ProcessingThread()
 {
+    static uint64_t frame_count = 0;
     while (rclcpp::ok() && _thread_running && !_device->isClosed())
     {
         auto leftPtr = _leftQueue->tryGet<dai::ImgFrame>();
@@ -212,6 +229,11 @@ void DepthAICamera::ProcessingThread()
             video_stream_chunk.data.swap(videoPtr->getData());
             video_stream_chunk.format = _videoH265 ? "H265" : "H264";
             _video_publisher->publish(video_stream_chunk);
+            if(frame_count < 100 || frame_count % 100 == 0)
+            {
+                RCLCPP_INFO(get_logger(), "Submit video-chunk #%d with time: %d.%09d", frame_count, sec, nsec);
+            }
+            frame_count ++;
         }
     }
 }
