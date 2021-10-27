@@ -167,7 +167,6 @@ struct DepthAIUtils
         }
         return true;
     }
-
 };
 
 }  // namespace depthai_ctrl

@@ -47,7 +47,6 @@ void DepthAICamera::Initialize()
     _videoH265 = (get_parameter("encoding").as_string() == "H265");
 }
 
-
 void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
 {
     nlohmann::json cmd{};
@@ -55,7 +54,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
     {
         cmd = nlohmann::json::parse(msg->data.c_str());
     }
-    catch(...)
+    catch (...)
     {
         RCLCPP_ERROR(this->get_logger(), "Error while parsing JSON string from VideoCommand");
         return;
@@ -75,23 +74,23 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
             std::string encoding = _videoH265 ? "H265" : "H264";
             std::string error_message{};
 
-            if(!cmd["Width"].empty() && cmd["Width"].is_number_integer())
+            if (!cmd["Width"].empty() && cmd["Width"].is_number_integer())
             {
                 nlohmann::from_json(cmd["Width"], width);
             }
-            if(!cmd["Height"].empty() && cmd["Height"].is_number_integer())
+            if (!cmd["Height"].empty() && cmd["Height"].is_number_integer())
             {
                 nlohmann::from_json(cmd["Height"], height);
             }
-            if(!cmd["Fps"].empty() && cmd["Fps"].is_number_integer())
+            if (!cmd["Fps"].empty() && cmd["Fps"].is_number_integer())
             {
                 nlohmann::from_json(cmd["Fps"], fps);
             }
-            if(!cmd["Bitrate"].empty() && cmd["Bitrate"].is_number_integer())
+            if (!cmd["Bitrate"].empty() && cmd["Bitrate"].is_number_integer())
             {
                 nlohmann::from_json(cmd["Bitrate"], bitrate);
             }
-            if(!cmd["Encoding"].empty() && cmd["Encoding"].is_string())
+            if (!cmd["Encoding"].empty() && cmd["Encoding"].is_string())
             {
                 nlohmann::from_json(cmd["Encoding"], encoding);
             }
@@ -107,7 +106,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
             }
             else
             {
-                RCLCPP_ERROR(this->get_logger(),error_message);
+                RCLCPP_ERROR(this->get_logger(), error_message);
             }
         }
     }
@@ -166,7 +165,7 @@ void DepthAICamera::TryRestarting()
     xoutColor->setStreamName("color");
     xoutVideo->setStreamName("video");
 
-    for(int i=0; i<3 && !_device; i++)
+    for (int i = 0; i < 3 && !_device; i++)
     {
         try
         {
@@ -178,7 +177,7 @@ void DepthAICamera::TryRestarting()
             _device.reset();
         }
     }
-    if(!_device)
+    if (!_device)
     {
         return;
     }
@@ -229,11 +228,11 @@ void DepthAICamera::ProcessingThread()
             video_stream_chunk.data.swap(videoPtr->getData());
             video_stream_chunk.format = _videoH265 ? "H265" : "H264";
             _video_publisher->publish(video_stream_chunk);
-            if(frame_count < 100 || frame_count % 100 == 0)
+            if (frame_count < 100 || frame_count % 100 == 0)
             {
                 RCLCPP_INFO(get_logger(), "Submit video-chunk #%d with time: %d.%09d", frame_count, sec, nsec);
             }
-            frame_count ++;
+            frame_count++;
         }
     }
 }

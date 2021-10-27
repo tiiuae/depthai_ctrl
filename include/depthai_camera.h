@@ -10,7 +10,7 @@
 #include <depthai/pipeline/node/XLinkIn.hpp>
 #include <depthai/pipeline/node/XLinkOut.hpp>
 #include <depthai/utility/Initialization.hpp>
-//restore compiler switches
+// restore compiler switches
 #pragma GCC diagnostic pop
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
@@ -47,26 +47,24 @@ class DepthAICamera : public rclcpp::Node
         TryRestarting();
     }
 
-    DepthAICamera(const rclcpp::NodeOptions& options) : Node("depthai_camera", options),
-                                                _videoWidth(1280),
-                                                _videoHeight(720),
-                                                _videoFps(25),
-                                                _videoBitrate(3000000),
-                                                _videoH265(false),
-                                                _thread_running(false),
-                                                _left_camera_frame("left_camera_frame"),
-                                                _right_camera_frame("right_camera_frame"),
-                                                _color_camera_frame("color_camera_frame")
+    DepthAICamera(const rclcpp::NodeOptions& options)
+        : Node("depthai_camera", options),
+          _videoWidth(1280),
+          _videoHeight(720),
+          _videoFps(25),
+          _videoBitrate(3000000),
+          _videoH265(false),
+          _thread_running(false),
+          _left_camera_frame("left_camera_frame"),
+          _right_camera_frame("right_camera_frame"),
+          _color_camera_frame("color_camera_frame")
     {
 
         Initialize();
         TryRestarting();
     }
 
-    ~DepthAICamera()
-    {
-        Stop();
-    };
+    ~DepthAICamera() { Stop(); };
 
     bool IsNodeRunning() { return bool(_device) && !_device->isClosed() && _thread_running; }
 
@@ -75,7 +73,7 @@ class DepthAICamera : public rclcpp::Node
         if (_thread_running)
         {
             _thread_running = false;
-            if(_processing_thread.joinable())
+            if (_processing_thread.joinable())
             {
                 _processing_thread.join();
             }
@@ -90,7 +88,7 @@ class DepthAICamera : public rclcpp::Node
 
   private:
     void ProcessingThread();
-    std::shared_ptr<ImageMsg> ConvertImage(std::shared_ptr<dai::ImgFrame>, const std::string& );
+    std::shared_ptr<ImageMsg> ConvertImage(std::shared_ptr<dai::ImgFrame>, const std::string&);
     void Initialize();
     void VideoStreamCommand(std_msgs::msg::String::SharedPtr);
 
@@ -125,7 +123,6 @@ class DepthAICamera : public rclcpp::Node
         {dai::RawImgFrame::Type::GRAY8, "mono8"},
         {dai::RawImgFrame::Type::RAW8, "8UC1"},
         {dai::RawImgFrame::Type::RAW16, "16UC1"}};
-
 };
 
 }  // namespace depthai_ctrl

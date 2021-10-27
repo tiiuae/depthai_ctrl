@@ -31,10 +31,7 @@ struct DepthAIGStreamer::Impl
 
     Impl() = default;
 
-    ~Impl()
-    {
-        StopStream();
-    }
+    ~Impl() { StopStream(); }
 
     void StopStream()
     {
@@ -62,8 +59,12 @@ struct DepthAIGStreamer::Impl
         const std::string h26Xparse = (encoderProfile == "H264") ? " ! h264parse" : " ! h265parse";
         const std::string h26Xencoder = (encoderProfile == "H264") ? " ! x264enc " : " ! x265enc ";
         const std::string gstFormat = (encoderProfile == "H264") ? "video/x-h264" : "video/x-h265";
-        const std::string h26Xcaps = (encoderProfile == "H264") ?
-                                     "! video/x-h264,pass=5,profile=baseline,trellis=false,tune=zerolatency,threads=0,speed-preset=superfast,subme=1,bitrate=4000" : "";
+        const std::string h26Xcaps = (encoderProfile == "H264")
+                                         ? "! "
+                                           "video/"
+                                           "x-h264,pass=5,profile=baseline,trellis=false,tune=zerolatency,threads=0,"
+                                           "speed-preset=superfast,subme=1,bitrate=4000"
+                                         : "";
         std::string payload = " ";
         std::string sink{};
 
@@ -84,15 +85,18 @@ struct DepthAIGStreamer::Impl
         isStreamDefault = queue.empty();
 
         std::string pipeline_string;
-        if(isStreamDefault)
+        if (isStreamDefault)
         {
-            pipeline_string = "videotestsrc pattern=ball ! video/x-raw,format=I420,width=1280,height=720,framerate=30/1 "
-                   "! textoverlay text=\"Camera not detected\" valignment=4 halignment=1 font-desc=Sans "
-                   "! videoconvert " + h26Xencoder + h26Xcaps + "! queue " + payload + sink;
+            pipeline_string =
+                "videotestsrc pattern=ball ! video/x-raw,format=I420,width=1280,height=720,framerate=30/1 "
+                "! textoverlay text=\"Camera not detected\" valignment=4 halignment=1 font-desc=Sans "
+                "! videoconvert " +
+                h26Xencoder + h26Xcaps + "! queue " + payload + sink;
         }
         else
         {
-            pipeline_string = "appsrc name=source ! " + gstFormat + ",profile=baseline,stream-format=byte-stream ! h264parse ! queue " + payload + sink;
+            pipeline_string = "appsrc name=source ! " + gstFormat +
+                              ",profile=baseline,stream-format=byte-stream ! h264parse ! queue " + payload + sink;
         }
 
         std::cout << "Create GST Pipeline:" << std::endl;
@@ -109,15 +113,15 @@ struct DepthAIGStreamer::Impl
             return false;
         }
 
-        if(pipeline == nullptr)
+        if (pipeline == nullptr)
         {
             return false;
         }
 
-        if(!isStreamDefault)
+        if (!isStreamDefault)
         {
             appSource = gst_bin_get_by_name(GST_BIN(pipeline), "source");
-            if(appSource == nullptr || !GST_IS_APP_SRC(appSource))
+            if (appSource == nullptr || !GST_IS_APP_SRC(appSource))
             {
                 return false;
             }
@@ -144,7 +148,6 @@ struct DepthAIGStreamer::Impl
             gst_object_unref(pipeline);
             pipeline = nullptr;
         }
-
     }
 
     /// Synchronous way to feed data into AppSrc
@@ -191,26 +194,29 @@ struct DepthAIGStreamer::Impl
     static void GStreamerThread(DepthAIGStreamer::Impl* data)
     {
         std::cout << "GStreamerThread started." << std::endl;
+        // one single error is enough to signal a problem
+        data->isErrorDetected = false;
 
         // main loop, which tries to recover from GST Errors
-        while(data->isStreamPlaying)
+        while (data->isStreamPlaying)
         {
             // delay before next attempt
             std::this_thread::sleep_for(std::chrono::seconds(1));
 
-            if(!data->CreateGstPipeline())
+            if (!data->CreateGstPipeline())
             {
                 data->isStreamPlaying = false;
                 break;
             }
 
-            auto bus = gst_element_get_bus (data->pipeline);
+            auto bus = gst_element_get_bus(data->pipeline);
             gst_element_set_state(data->pipeline, GST_STATE_PLAYING);
-            data->isErrorDetected = false;
 
-            while (data->isStreamPlaying && !data->isErrorDetected)
+            bool error_detected = false;
+
+            while (data->isStreamPlaying && !error_detected)
             {
-                if(data->isStreamDefault || data->queue.empty())
+                if (data->isStreamDefault || data->queue.empty())
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 }
@@ -219,26 +225,26 @@ struct DepthAIGStreamer::Impl
                     data->PushAppSrcData();
                 }
 
-                GstMessage *message = gst_bus_poll (bus, GST_MESSAGE_ERROR, 1);
-                if(message != nullptr && message->type == GST_MESSAGE_ERROR)
+                GstMessage* message = gst_bus_poll(bus, GST_MESSAGE_ERROR, 1);
+                if (message != nullptr && message->type == GST_MESSAGE_ERROR)
                 {
                     // When the application receives an error message it should stop playback of the pipeline
                     // and not assume that more data will be played
                     data->isErrorDetected = true;
+                    error_detected = true;
 
-                    GError *err{};
-                    gchar *dbg_info{};
+                    GError* err{};
+                    gchar* dbg_info{};
 
-                    gst_message_parse_error (message, &err, &dbg_info);
-                    g_printerr ("ERROR from element %s: %s\n",
-                                GST_OBJECT_NAME (message->src), err->message);
-                    g_printerr ("Debugging info: %s\n", (dbg_info) ? dbg_info : "none");
-                    g_error_free (err);
-                    g_free (dbg_info);
+                    gst_message_parse_error(message, &err, &dbg_info);
+                    g_printerr("ERROR from element %s: %s\n", GST_OBJECT_NAME(message->src), err->message);
+                    g_printerr("Debugging info: %s\n", (dbg_info) ? dbg_info : "none");
+                    g_error_free(err);
+                    g_free(dbg_info);
                 }
             }
 
-            gst_object_unref (bus);
+            gst_object_unref(bus);
             data->ClearGstPipeline();
         }
 
@@ -341,8 +347,8 @@ void DepthAIGStreamer::Initialize()
 
     RCLCPP_DEBUG(get_logger(), "Namespace: %s", (default_stream_path + ns).c_str());
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer 1.0.2 started.");
-    RCLCPP_INFO(get_logger(), "Streaming %s to address: %s", _impl->encoderProfile.c_str(),
-        _impl->streamAddress.c_str());
+    RCLCPP_INFO(
+        get_logger(), "Streaming %s to address: %s", _impl->encoderProfile.c_str(), _impl->streamAddress.c_str());
 
     if (get_parameter("start_stream_on_boot").as_bool())
     {
@@ -353,16 +359,6 @@ void DepthAIGStreamer::Initialize()
 
 void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
-//    const auto stamp = video_msg->header.stamp;
-//    static uint64_t frame_count = 0UL;
-//    if (frame_count < 100 || frame_count % 100 == 0)
-//    {
-//        RCLCPP_INFO(
-//            get_logger(), "Received video-chunk #%d at time: %d.%09d sec ", frame_count, stamp.sec, stamp.nanosec);
-//    }
-//
-//    frame_count++;
-
     _impl->queueMutex.lock();
     _impl->queue.push(video_msg);
     // When message queue is too big - delete old messages
@@ -381,7 +377,7 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
     {
         cmd = nlohmann::json::parse(msg->data.c_str());
     }
-    catch(...)
+    catch (...)
     {
         RCLCPP_ERROR(this->get_logger(), "Error while parsing JSON string from VideoCommand");
         return;

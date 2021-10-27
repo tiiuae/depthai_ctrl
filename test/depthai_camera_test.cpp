@@ -19,7 +19,6 @@ TEST(DepthAICameraTest, BasicTest)
     EXPECT_NO_THROW(camera_node = std::make_shared<depthai_ctrl::DepthAICamera>());
     EXPECT_FALSE(camera_node->IsNodeRunning());
 
-
     auto left_subscriber = rclcpp::create_subscription<ImageMsg>(
         *camera_node, "camera/left/image_raw", rclcpp::SensorDataQoS(), [](const ImageMsg::SharedPtr a) { (void)a; });
 
@@ -30,7 +29,9 @@ TEST(DepthAICameraTest, BasicTest)
         *camera_node, "camera/color/image_raw", rclcpp::SensorDataQoS(), [](const ImageMsg::SharedPtr a) { (void)a; });
 
     auto video_subscriber = rclcpp::create_subscription<CompressedImageMsg>(
-        *camera_node, "camera/color/video", rclcpp::SensorDataQoS(), [](const CompressedImageMsg::SharedPtr a) { (void)a; });
+        *camera_node, "camera/color/video", rclcpp::SensorDataQoS(), [](const CompressedImageMsg::SharedPtr a) {
+            (void)a;
+        });
 
     // Each topic must have 1 publisher
     EXPECT_EQ(1UL, left_subscriber->get_publisher_count());
@@ -44,7 +45,6 @@ TEST(DepthAICameraTest, BasicTest)
     EXPECT_NO_THROW(camera_node.reset());
 }
 
-
 /// Creates GStreamerCamera with NodeOptions constructor
 TEST(DepthAICameraTest, CorrectVideoComandTest)
 {
@@ -53,8 +53,8 @@ TEST(DepthAICameraTest, CorrectVideoComandTest)
     EXPECT_NO_THROW(camera_node = std::make_shared<depthai_ctrl::DepthAICamera>(options));
 
     // prepare and send a command
-    auto command_publisher = rclcpp::create_publisher<std_msgs::msg::String>(
-        *camera_node, "/videostreamcmd", rclcpp::SystemDefaultsQoS());
+    auto command_publisher =
+        rclcpp::create_publisher<std_msgs::msg::String>(*camera_node, "/videostreamcmd", rclcpp::SystemDefaultsQoS());
 
     ASSERT_EQ(command_publisher->get_subscription_count(), 1);
     std_msgs::msg::String command{};
@@ -76,8 +76,8 @@ TEST(DepthAICameraTest, WrongVideoComandTest)
     EXPECT_NO_THROW(camera_node = std::make_shared<depthai_ctrl::DepthAICamera>(options));
 
     // prepare and send a command
-    auto command_publisher = rclcpp::create_publisher<std_msgs::msg::String>(
-        *camera_node, "/videostreamcmd", rclcpp::SystemDefaultsQoS());
+    auto command_publisher =
+        rclcpp::create_publisher<std_msgs::msg::String>(*camera_node, "/videostreamcmd", rclcpp::SystemDefaultsQoS());
 
     ASSERT_EQ(command_publisher->get_subscription_count(), 1);
     std_msgs::msg::String command{};
@@ -90,4 +90,3 @@ TEST(DepthAICameraTest, WrongVideoComandTest)
 
     EXPECT_NO_THROW(camera_node.reset());
 }
-
