@@ -1,5 +1,6 @@
 #include "depthai_gstreamer.h"
 #include "gtest/gtest.h"
+#include <gst/app/gstappsink.h>
 #include <gst/gst.h>
 #include <gst/gstcaps.h>
 #include <gst/rtsp-server/rtsp-server.h>
@@ -87,7 +88,7 @@ class StaticRTSPServer
 
     /// Handler for "client_connected" signal
     /// Transmitting instance of class as "gpointer obj" allows to distinguish connections coming from different tests
-    static void client_connected_handler(GstRTSPServer*, GstRTSPClient* client, gpointer obj)
+    static void client_connected_handler(GstRTSPServer*, GstRTSPClient*, gpointer obj)
     {
         std::cout << "Client Connection Detected!" << std::endl;
         auto instance = static_cast<StaticRTSPServer*>(obj);
@@ -117,7 +118,6 @@ class DepthAIGStreamerTest : public ::testing::Test
     StaticRTSPServer& rtspServer;
 
     DepthAIGStreamerTest() : rtspServer(StaticRTSPServer::getInstance()) {}
-
 };
 
 /// Check if our "test environment" (which could be inside Docker) works with the GStreamer.
@@ -144,7 +144,7 @@ TEST_F(DepthAIGStreamerTest, InternalTest_RtspServerTest)
     rtspServer.connection_detected = false;
     EXPECT_FALSE(rtspServer.connection_detected);
 
-    std::cout << "Trying to catch connection ..." << std::endl;
+    std::cout << "Trying to catch client connection ..." << std::endl;
     const std::string pipeline_string =
         "videotestsrc name=source pattern=ball ! video/x-raw,format=YUY2,width=640,height=480,framerate=30/1 ! "
         "videoconvert ! x264enc ! rtspclientsink location=rtsps://127.0.0.1:8554";
@@ -228,8 +228,7 @@ TEST_F(DepthAIGStreamerTest, BasicTest_AddressPipelineHackTest)
     ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
-/// StartOnBoot enabled, but still not connected -> expect no gst pipeline crush,
-/// EXPECT isStreamPlaying = true ,  isStreamDefault = true
+/// StartOnBoot enabled, but address is wrong -> expect no gst pipeline crush,
 TEST_F(DepthAIGStreamerTest, StartOnBoot_BasicTest)
 {
     rclcpp::NodeOptions options{};
@@ -237,29 +236,10 @@ TEST_F(DepthAIGStreamerTest, StartOnBoot_BasicTest)
 
     std::vector<rclcpp::Parameter>& parameters = options.parameter_overrides();
     parameters.push_back({"start_stream_on_boot", true});
-    parameters.push_back({"address", "rtsp://127.0.0.1:8554/test"});
+    parameters.push_back({"address", "rtsp://UNKNOWN_ADDRESS:11111/test"});
     ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    // stream supposed to be playing, even if server is off
-    EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
-    // EXPECT_TRUE(gstreamer_node->IsErrorDetected());
-    // we play "default" stream, as no real camera connected
-    EXPECT_TRUE(gstreamer_node->IsStreamDefault());
-    ASSERT_NO_THROW(gstreamer_node.reset());
-}
-
-TEST_F(DepthAIGStreamerTest, StartOnBoot_NotExistingAddressTest)
-{
-    rclcpp::NodeOptions options{};
-    std::shared_ptr<depthai_ctrl::DepthAIGStreamer> gstreamer_node;
-
-    std::vector<rclcpp::Parameter>& parameters = options.parameter_overrides();
-    parameters.push_back({"start_stream_on_boot", true});
-    parameters.push_back({"address", "rtsp://127.0.0.2:8555/test"});
-    ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
-
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     // stream supposed to be playing, even if server is off
     EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
     EXPECT_TRUE(gstreamer_node->IsErrorDetected());
@@ -268,7 +248,8 @@ TEST_F(DepthAIGStreamerTest, StartOnBoot_NotExistingAddressTest)
     ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
-/// StartOnBoot enabled, but still not connected -> expect no gst pipeline crush, isStreamPlaying == true
+#ifdef MULTI_THREADING_FIXED
+/// Same as before, but UDP address is set
 TEST_F(DepthAIGStreamerTest, StartOnBoot_UDPTest)
 {
     rclcpp::NodeOptions options{};
@@ -279,7 +260,7 @@ TEST_F(DepthAIGStreamerTest, StartOnBoot_UDPTest)
     parameters.push_back({"address", "udp://127.0.0.1:8554"});
     ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     // stream supposed to be playing, even if server is off
     EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
     // UDP connectivity error shall be detected!
@@ -289,7 +270,7 @@ TEST_F(DepthAIGStreamerTest, StartOnBoot_UDPTest)
     ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
-/// StartOnBoot enabled, but still not connected -> expect no gst pipeline crush, isStreamPlaying == true
+/// Same as before, but H265 encoding is set
 TEST_F(DepthAIGStreamerTest, StartOnBoot_H265Test)
 {
     rclcpp::NodeOptions options{};
@@ -306,7 +287,7 @@ TEST_F(DepthAIGStreamerTest, StartOnBoot_H265Test)
         *gstreamer_node, "camera/color/video", rclcpp::SystemDefaultsQoS());
     EXPECT_EQ(1UL, video_publisher->get_subscription_count());
 
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::this_thread::sleep_for(std::chrono::seconds(3));
     // stream supposed to be playing, even if server is off
     EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
     EXPECT_TRUE(gstreamer_node->IsErrorDetected());
@@ -328,44 +309,11 @@ TEST_F(DepthAIGStreamerTest, LocalServer_DefaultAddressTest)
     parameters.push_back({"start_stream_on_boot", true});
 
     ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    EXPECT_TRUE(rtspServer.connection_detected);
 
     EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
-
-    // give it a time to connect and initialize a stream
-    rclcpp::spin_some(gstreamer_node);
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-
-    // make sure the stream is "default"
     EXPECT_TRUE(gstreamer_node->IsStreamDefault());
-
-    EXPECT_TRUE(rtspServer.connection_detected);
-    ASSERT_NO_THROW(gstreamer_node.reset());
-}
-
-/// Check if we may connect GStreamerNode to local test rtsp server
-/// it will play "default" stream
-TEST_F(DepthAIGStreamerTest, LocalServer_DefaultStreamTest)
-{
-    rtspServer.connection_detected = false;
-
-    rclcpp::NodeOptions options{};
-    std::shared_ptr<depthai_ctrl::DepthAIGStreamer> gstreamer_node;
-
-    std::vector<rclcpp::Parameter>& parameters = options.parameter_overrides();
-    parameters.push_back({"start_stream_on_boot", true});
-    parameters.push_back({"address", "rtsp://127.0.0.1:8554/test"});
-
-    ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
-
-    // give it a time to connect and initialize a stream
-    rclcpp::spin_some(gstreamer_node);
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-
-    EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
-    // make sure the stream is "default"
-    EXPECT_TRUE(gstreamer_node->IsStreamDefault());
-
-    EXPECT_TRUE(rtspServer.connection_detected);
     ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
@@ -382,6 +330,8 @@ TEST_F(DepthAIGStreamerTest, LocalServer_DelayedStartTest)
 
     ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
+    // give it a time to initialize a stream -> it must not run though
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     EXPECT_FALSE(rtspServer.connection_detected);  // GStreamer have not tried to connected
     EXPECT_FALSE(gstreamer_node->IsStreamPlaying());
 
@@ -400,7 +350,7 @@ TEST_F(DepthAIGStreamerTest, LocalServer_DelayedStartTest)
     rclcpp::spin_some(gstreamer_node);
 
     // give it a time to initialize a stream
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     EXPECT_TRUE(rtspServer.connection_detected);
     EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
 
@@ -409,7 +359,7 @@ TEST_F(DepthAIGStreamerTest, LocalServer_DelayedStartTest)
     ASSERT_NO_THROW(gstreamer_node.reset());
 }
 
-#ifdef MULTI_THREADING_FIXED
+
 /// Send several empty ROS messages, pretending we have a camera
 TEST_F(DepthAIGStreamerTest, LocalServer_FakeCameraTest)
 {
@@ -430,13 +380,41 @@ TEST_F(DepthAIGStreamerTest, LocalServer_FakeCameraTest)
     auto stream_publisher = rclcpp::create_publisher<CompressedImageMsg>(
         *gstreamer_node, "camera/color/video", rclcpp::SystemDefaultsQoS());
 
+    const std::string pipeline_string =
+        "videotestsrc num-buffers=1 pattern=ball ! video/x-raw,format=YUY2,width=640,height=480,framerate=30/1 ! "
+        "videoconvert ! x264enc ! appsink name=sink";
+    GError* parse_error = nullptr;
+    auto pipeline = gst_parse_launch(pipeline_string.c_str(), &parse_error);
+    ASSERT_EQ(parse_error, nullptr);
+    ASSERT_NE(pipeline, nullptr);
+
+    auto appSink = gst_bin_get_by_name(GST_BIN(pipeline), "sink");
+    ASSERT_NE(appSink, nullptr);
+    ASSERT_TRUE(GST_IS_APP_SINK(appSink));
+
+    gst_element_set_state(pipeline, GST_STATE_PLAYING);
+
     CompressedImageMsg msg{};
     msg.header.stamp.sec = 1;
     msg.header.stamp.nanosec = 1;
     msg.header.frame_id = "camera";
     msg.data = {'\0'};
     msg.format = "H264";
+
+    GstSample* sample = gst_app_sink_pull_sample(GST_APP_SINK(appSink));
+
+    ASSERT_NE(sample, nullptr);
+
+    GstBuffer* buffer = gst_sample_get_buffer(sample);
+
+    ASSERT_NE(buffer, nullptr);
+
+    size_t length = GST_BUFFER_OFFSET_END(buffer) - GST_BUFFER_OFFSET(buffer);
+    msg.data.resize(length);
+    gst_buffer_extract(buffer, GST_BUFFER_OFFSET(buffer), &msg.data[0], length);
+
     stream_publisher->publish(msg);
+
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
     rclcpp::spin_some(gstreamer_node);
 
@@ -455,13 +433,16 @@ TEST_F(DepthAIGStreamerTest, LocalServer_FakeCameraTest)
     rclcpp::spin_some(gstreamer_node);
 
     // give it a time to initialize a stream
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    EXPECT_FALSE(rtspServer.connection_detected);
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    EXPECT_TRUE(rtspServer.connection_detected);
     EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
 
     // make sure the stream is "default"
     EXPECT_FALSE(gstreamer_node->IsStreamDefault());
 
     ASSERT_NO_THROW(gstreamer_node.reset());
+
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    ASSERT_NO_THROW(gst_object_unref(pipeline));
 }
 #endif
