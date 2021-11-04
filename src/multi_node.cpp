@@ -28,7 +28,7 @@ int main(int argc, char * argv[])
     exec.add_node(camera);
     auto gstreamer = std::make_shared<DepthAIGStreamer>(argc, argv);
     exec.add_node(gstreamer);
-
+    
     // spin will block until work comes in, execute work as it becomes available, and keep blocking.
     // It will only be interrupted by Ctrl-C.
     exec.spin();

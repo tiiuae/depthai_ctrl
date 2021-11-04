@@ -104,7 +104,7 @@ struct DepthAIGStreamer::Impl
         {
             data->isStreamDefault = false;
 
-            const std::string pipeline_string = "appsrc name=source ! h264parse " + payload + "! " + sink;
+            const std::string pipeline_string = "appsrc name=source ! " + h26xparse +" " + payload + "! " + sink;
             std::cout << "Starting pipeline:" << std::endl;
             std::cout << pipeline_string << std::endl;
             GError* parse_error = nullptr;

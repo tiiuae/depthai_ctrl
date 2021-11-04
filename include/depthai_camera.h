@@ -39,6 +39,9 @@ class DepthAICamera : public rclcpp::Node
           _videoH265(false),
           _processing_thread{},
           _thread_running(false),
+          _useMonoCams(false),
+          _useRawColorCam(false),
+          _useUSB3(false),
           _left_camera_frame("left_camera_frame"),
           _right_camera_frame("right_camera_frame"),
           _color_camera_frame("color_camera_frame")
@@ -54,6 +57,9 @@ class DepthAICamera : public rclcpp::Node
                                                 _videoBitrate(3000000),
                                                 _videoH265(false),
                                                 _thread_running(false),
+                                                _useMonoCams(false),
+                                                _useRawColorCam(false),
+                                                _useUSB3(false),
                                                 _left_camera_frame("left_camera_frame"),
                                                 _right_camera_frame("right_camera_frame"),
                                                 _color_camera_frame("color_camera_frame")
@@ -90,6 +96,11 @@ class DepthAICamera : public rclcpp::Node
 
   private:
     void ProcessingThread();
+
+    void onLeftCamCallback(const std::string& stream_name, const std::shared_ptr<dai::ADatatype> data);
+    void onRightCallback(const std::string& stream_name, const std::shared_ptr<dai::ADatatype> data);
+    void onColorCamCallback(const std::string& stream_name, const std::shared_ptr<dai::ADatatype> data);
+    void onVideoEncoderCallback(const std::string& stream_name, const std::shared_ptr<dai::ADatatype> data);
     std::shared_ptr<ImageMsg> ConvertImage(std::shared_ptr<dai::ImgFrame>, const std::string& );
     void Initialize();
     void VideoStreamCommand(std_msgs::msg::String::SharedPtr);
@@ -100,12 +111,18 @@ class DepthAICamera : public rclcpp::Node
     std::shared_ptr<dai::DataOutputQueue> _leftQueue;
     std::shared_ptr<dai::DataOutputQueue> _rightQueue;
     std::shared_ptr<dai::DataOutputQueue> _colorQueue;
+    std::shared_ptr<dai::DataInputQueue> _colorCamInputQueue;
 
     int _videoWidth;
     int _videoHeight;
     int _videoFps;
     int _videoBitrate;
     bool _videoH265;
+    bool _useMonoCams;
+    bool _useRawColorCam;
+    bool _useUSB3;
+    rclcpp::Time _lastFrameTime;
+    long int  _lastFrameTimePoint;
 
     std::shared_ptr<rclcpp::Publisher<ImageMsg>> _left_publisher;
     std::shared_ptr<rclcpp::Publisher<ImageMsg>> _right_publisher;

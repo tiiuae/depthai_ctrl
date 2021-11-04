@@ -58,7 +58,8 @@ def generate_launch_description():
                 ],
                 parameters=[
                     #pkg_path + '/config/gstreamer_config.yaml',
-                    {"start_stream_on_boot": True},
+                    {"start_stream_on_boot": True,
+                     "address":"rtsps://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@video-stream.sacplatform.com:8555/performancetest1"},
                     #{"use_sim_time": launch.substitutions.LaunchConfiguration("use_sim_time")},
                 ],
             ),
