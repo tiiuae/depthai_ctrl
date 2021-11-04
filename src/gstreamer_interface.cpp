@@ -1,7 +1,8 @@
 #include <../include/gstreamer_interface.hpp>
 
 
-using namespace depthai_ctrl;
+namespace depthai_ctrl
+{
 using std::placeholders::_1;
 
 GstInterface::GstInterface(int argc, char * argv[])
@@ -49,6 +50,44 @@ GstInterface::~GstInterface()
   }
   if (_mLoopContext) {
     g_main_context_unref(_mLoopContext);
+  }
+  _isStreamPlaying = false;
+}
+
+
+void GstInterface::StartStream()
+{
+  //isStreamPlaying = true;
+  //gstThread = std::thread(std::bind(DepthAIGStreamer::Impl::CreatePipeLine, this));
+  CreatePipeLine(this);
+  this->mLoopThread = g_thread_new(
+    "GstThread", (GThreadFunc)GstInterface::PlayStream,
+    this);
+
+  std::cout << "CreatePipeLine finished." << std::endl;
+}
+
+void GstInterface::StopStream(void)
+{
+  GstFlowReturn ret;
+
+  if (_needDataSignalId != 0) {
+    g_signal_handler_disconnect(_appSource, _needDataSignalId);
+  }
+  if (_appSource != nullptr) {
+    g_signal_emit_by_name(_appSource, "end-of-stream", &ret);
+    if (ret != GST_FLOW_OK) {
+      g_printerr("Error: Emit end-of-stream failed\n");
+    }
+  }
+  if (_pipeline != nullptr) {
+    gst_element_set_state(_pipeline, GST_STATE_NULL);
+  }
+  if (_mLoop != nullptr) {
+    g_main_loop_quit(_mLoop);
+  }
+  if (_mLoopThread != nullptr) {
+    g_thread_join(_mLoopThread);
   }
   _isStreamPlaying = false;
 }
@@ -134,12 +173,20 @@ void GstInterface::BuildPipeline()
       GST_FORMAT_TIME,
       nullptr);
   }
-  _mLoopThread = g_thread_new("GstThread", (GThreadFunc)DepthAIGst::PlayStream, this);
+
+  _bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
+  _busWatchId = gst_bus_add_watch(_bus, GstInterface::StreamEventCallBack, this);
+  gst_object_unref(_bus);
+  _bus = nullptr;
+
+  _mLoopThread = g_thread_new("GstThread", (GThreadFunc)GstInterface::PlayStream, this);
 
   _needDataSignalId = g_signal_connect(_appSource, "need-data", G_CALLBACK(NeedDataCallBack), this);
 }
 
-static void NeedDataCallBack(GstElement * appsrc, guint unused_size, gpointer user_data)
+static void GstInterface::NeedDataCallBack(
+  GstElement * appsrc, guint unused_size,
+  gpointer user_data)
 {
   GstInterface * data = (GstInterface *)user_data;
   if (!data->queue.empty() && !data->_isStreamDefault) {
@@ -167,3 +214,42 @@ static void NeedDataCallBack(GstElement * appsrc, guint unused_size, gpointer us
       std::endl;
   }
 }
+
+static void * GstInterface::PlayStream(gpointer data)
+{
+  GstInterface * gstImpl = (GstInterface *)data;
+  std::cout << "PlayStream callback called." << std::endl;
+  // DepthAICam * depthAICam = depthAIGst->depthAICam;
+  // if (depthAICam != nullptr) {
+  //     depthAICam->StartStreaming();
+  // }
+  std::cout << "GStreamer(PlayStream): Pipeline Change State Playing" << std::endl;
+
+  gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);
+  g_main_loop_run(gstImpl->_mLoop);
+  g_thread_exit(gstImpl->_mLoopThread);
+
+  return nullptr;
+}
+
+static gboolean GstInterface::StreamPlayingRestartCallback(gpointer user_data)
+{
+  GstInterface * gstImpl = (GstInterface *)user_data;
+
+  g_debug("Restart stream because of connection failed.\n");
+  if (gstImpl->_appSource) {
+    gstImpl->_needDataSignalId = g_signal_connect(
+      gstImpl->_appSource, "need-data",
+      G_CALLBACK(GstInterface::NeedDataCallBack), gstImpl);
+  }
+  gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);
+
+  return G_SOURCE_REMOVE;
+}
+
+// Use this function to execute code when timer is removed.
+static void GstInterface::StreamPlayingRestartDone(gpointer user_data)
+{
+  (void)user_data;
+}
+} //namespace depthai_ctrl
