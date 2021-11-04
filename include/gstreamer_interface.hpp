@@ -1,5 +1,16 @@
 #ifndef FOG_SW_DEPTHAI_GSTREAMER_INTERFACE_H
 #define FOG_SW_DEPTHAI_GSTREAMER_INTERFACE_H
+#include <memory>
+#include <thread>
+#include <iostream>
+#include <chrono>
+#include <stdlib.h>
+#include <functional>
+#include <algorithm>
+#include <string>
+#include <cctype>
+#include <arpa/inet.h>
+
 #include "depthai_utils.h"
 #include <gst/app/gstappsrc.h>
 #include <gst/gst.h>
@@ -13,13 +24,16 @@
 #include <queue>
 
 
-using namespace depthai_ctrl;
+namespace depthai_ctrl
+{
+
 using std::placeholders::_1;
 
+using namespace std::chrono_literals;
+using CompressedImageMsg = sensor_msgs::msg::CompressedImage;
 class GstInterface
 {
 public:
-  using CompressedImageMsg = sensor_msgs::msg::CompressedImage;
   //! @brief Constructor
   //! Constructor for GstInterface class
   //! @return void
@@ -66,7 +80,7 @@ public:
   //! @brief Return encoder width
   //! @return encoder width
   //!
-  int GetEncoderWidth() {return mEncoderWidth;}
+  int GetEncoderWidth() {return _encoderWidth;}
 
   //! @brief Set encoder height
   //! @param[in] height - height of the encoder
@@ -82,13 +96,13 @@ public:
       g_printerr("Height must be multiple of 8 for H26x encoder profile.\n");
       return;
     }
-    mEncoderHeight = height;
+    _encoderHeight = height;
   }
 
   //! @brief Return encoder height
   //! @return encoder height
   //!
-  int GetEncoderHeight() {return mEncoderHeight;}
+  int GetEncoderHeight() {return _encoderHeight;}
 
   //! @brief Set encoder fps
   //! @param[in] fps - fps of the encoder
@@ -100,11 +114,11 @@ public:
       g_printerr("Too high frames per second.\n");
       return;
     }
-    mEncoderFps = fps;
+    _encoderFps = fps;
   }
   //! @brief Return encoder fps
   //!
-  int GetEncoderFps() {return mEncoderFps;}
+  int GetEncoderFps() {return _encoderFps;}
 
   //! @brief Set encoder bitrate
   //! @param[in] bitrate - bitrate of the encoder
@@ -112,13 +126,13 @@ public:
   //!
   void SetEncoderBitrate(int bitrate)
   {
-    mEncoderBitrate = bitrate;
+    _encoderBitrate = bitrate;
   }
 
   //! @brief Return encoder bitrate
   //! @return encoder bitrate
   //!
-  int GetEncoderBitrate() {return mEncoderBitrate;}
+  int GetEncoderBitrate() {return _encoderBitrate;}
 
   //! @brief Set encoder profile
   //! @param[in] profile - profile of the encoder
@@ -131,13 +145,13 @@ public:
       g_printerr("Not valid H26x profile.\n");
       return;
     }
-    mEncoderProfile = profile;
+    _encoderProfile = profile;
   }
 
   //! @brief Return encoder profile
   //! @return encoder profile
   //!
-  const std::string & GetEncoderProfile() {return mEncoderProfile;}
+  const std::string & GetEncoderProfile() {return _encoderProfile;}
 
   //! @brief Set stream address for GST sink
   //! @param[in] address - address of the stream
@@ -147,12 +161,12 @@ public:
   //!
   void SetStreamAddress(const std::string address)
   {
-    mStreamAddress = address;
-    if (mRtspSink) {
+    _streamAddress = address;
+    if (_rtspSink) {
       g_object_set(
-        G_OBJECT(mRtspSink),
+        G_OBJECT(_rtspSink),
         "protocols", 4,                 // 4 = tcp
-        "location", mStreamAddress.c_str(),
+        "location", _streamAddress.c_str(),
         NULL);
     }
   }
@@ -243,7 +257,7 @@ protected:
 
       case GST_MESSAGE_LATENCY:
         g_print("Redistribute latency...\n");
-        gst_bin_recalculate_latency(GST_BIN(depthAIGst->mPipeline));
+        gst_bin_recalculate_latency(GST_BIN(depthAIGst->_pipeline));
         break;
 
       case GST_MESSAGE_ELEMENT:
@@ -267,13 +281,13 @@ protected:
         if (g_strrstr(GST_OBJECT_NAME(message->src), "rtspbin") &&
           new_state == GST_STATE_PLAYING)
         {
-          depthAIGst->mIsStreamPlaying = true;
+          depthAIGst->_isStreamPlaying = true;
         }
         break;
 
       case GST_MESSAGE_EOS:
         g_print("End of stream.\n");
-        g_main_loop_quit(depthAIGst->mLoop);
+        g_main_loop_quit(depthAIGst->_mLoop);
         break;
 
       case GST_MESSAGE_TAG:
@@ -310,27 +324,27 @@ protected:
           g_strrstr(error->message, "Could not open resource for reading and writing"))
         {
           GstFlowReturn ret;
-          if (depthAIGst->mNeedDataSignalId != 0) {
-            g_signal_handler_disconnect(depthAIGst->mAppsrc, depthAIGst->mNeedDataSignalId);
+          if (depthAIGst->_needDataSignalId != 0) {
+            g_signal_handler_disconnect(depthAIGst->_appSource, depthAIGst->_needDataSignalId);
           }
-          if (depthAIGst->mAppsrc != nullptr) {
-            g_signal_emit_by_name(depthAIGst->mAppsrc, "end-of-stream", &ret);
+          if (depthAIGst->_appSource != nullptr) {
+            g_signal_emit_by_name(depthAIGst->_appSource, "end-of-stream", &ret);
             if (ret != GST_FLOW_OK) {
               g_printerr("Error: Emit end-of-stream failed\n");
             }
           }
-          if (depthAIGst->mPipeline != nullptr) {
-            gst_element_set_state(depthAIGst->mPipeline, GST_STATE_NULL);
+          if (depthAIGst->_pipeline != nullptr) {
+            gst_element_set_state(depthAIGst->_pipeline, GST_STATE_NULL);
           }
-          depthAIGst->mIsStreamPlaying = false;
+          depthAIGst->_isStreamPlaying = false;
           // Restart stream after two seconds.
           source = g_timeout_source_new(2000);
           g_source_set_callback(
             source,
-            DepthAIGst::StreamPlayingRestartCallback,
+            GstInterface::StreamPlayingRestartCallback,
             depthAIGst,
-            DepthAIGst::StreamPlayingRestartDone);
-          g_source_attach(source, depthAIGst->mLoopContext);
+            GstInterface::StreamPlayingRestartDone);
+          g_source_attach(source, depthAIGst->_mLoopContext);
           g_source_unref(source);
         }
         g_error_free(error);
@@ -366,12 +380,12 @@ protected:
   //! @brief Return is stream playing private boolean.
   //! @return true if stream is playing, false otherwise.
   //!
-  bool IsStreamPlaying() {return isStreamPlaying;}
+  bool IsStreamPlaying() {return _isStreamPlaying;}
 
   //! @brief Return is stream default private boolean.
   //! @return true if stream is default, false otherwise.
   //!
-  bool IsStreamDefault() {return isStreamDefault;}
+  bool IsStreamDefault() {return _isStreamDefault;}
 
 
   //! @brief Incoming message queue, shared with ROS2 node.
@@ -381,7 +395,7 @@ protected:
 
 private:
   //! @brief The gst pipeline element
-  GstElement * _pipeline {}
+  GstElement * _pipeline {};
   //! @brief The gst appsource element
   GstElement * _appSource {};
   //! @brief bus watch id for gst messages
@@ -393,9 +407,9 @@ private:
   //! @brief stamp of the first frame received from the camera
   GstClockTime _stamp0 {};
   //! @brief is stream playing private boolean
-  std::atomic<bool> _isStreamPlaying {false};
+  bool _isStreamPlaying = false;
   //! @brief is stream default private boolean
-  std::atomic<bool> _isStreamDefault {false};
+  bool _isStreamDefault = false;
   //! @brief The main gst loop context
   GMainContext * _mLoopContext;
   //! @brief The main gst loop thread
@@ -407,6 +421,12 @@ private:
   //! @brief stream address, either starts with udp:// or rtsps://
   std::string _streamAddress {};
 
-};
+  GstElement * _rtspSink {};
 
+  int _encoderWidth;
+  int _encoderHeight;
+  int _encoderFps;
+  int _encoderBitrate;
+};
+} // namespace depthai_ctrl
 #endif //FOG_SW_DEPTHAI_GSTREAMER_INTERFACE_H

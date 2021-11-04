@@ -57,9 +57,14 @@ target_link_libraries(camera_node PUBLIC depthai_camera)
 
 
 # DepthAI GStreamer as Component library
+add_library(gstreamer_interface SHARED src/gstreamer_interface.cpp)
+ament_target_dependencies(gstreamer_interface PUBLIC rclcpp std_msgs sensor_msgs)
+target_link_libraries(gstreamer_interface PUBLIC ${GST_LIBRARIES} gstapp-1.0)
+
+# DepthAI GStreamer as Component library
 add_library(depthai_gstreamer SHARED src/depthai_gstreamer.cpp)
 ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs)
-target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0)
+target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0 gstreamer_interface)
 
 # DepthAI GStreamer as separate node
 add_executable(gstreamer_node src/gstreamer_node.cpp)
@@ -102,7 +107,7 @@ if (BUILD_TESTING)
   add_test(depthai_gstreamer_test depthai_gstreamer_test)
 endif (BUILD_TESTING)
 
-install(TARGETS depthai_camera depthai_gstreamer
+install(TARGETS depthai_camera depthai_gstreamer gstreamer_interface
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)

@@ -1,15 +1,14 @@
-#include <../include/gstreamer_interface.hpp>
+#include <gstreamer_interface.hpp>
 
 
 namespace depthai_ctrl
 {
-using std::placeholders::_1;
-
 GstInterface::GstInterface(int argc, char * argv[])
-: _mLoopContext(nullptr), _mLoopThread(nullptr), _mLoop(nullptr), _pipeline(nullptr),
+: _mLoopContext(nullptr), _mLoopThread(nullptr), _mLoop(nullptr),
   _pipeline(nullptr), _appSource(nullptr), _encoderProfile("H264"),
-  _busWatchId(0), _bus(nullptr), _needDataSignalId(0)
-  _isStreamPlaying(false), _isStreamDefault(false)
+  _busWatchId(0), _bus(nullptr), _needDataSignalId(0),
+  _isStreamPlaying(false), _isStreamDefault(false), _encoderWidth(1280),
+  _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000), _rtspSink(nullptr)
 {
   _streamAddress = "";
   gst_init(&argc, &argv);
@@ -19,6 +18,7 @@ GstInterface::GstInterface(int argc, char * argv[])
 
 GstInterface::~GstInterface()
 {
+  GstFlowReturn ret;
   if (_needDataSignalId != 0) {
     g_signal_handler_disconnect(_appSource, _needDataSignalId);
   }
@@ -54,7 +54,7 @@ GstInterface::~GstInterface()
   _isStreamPlaying = false;
 }
 
-
+/*
 void GstInterface::StartStream()
 {
   //isStreamPlaying = true;
@@ -65,7 +65,7 @@ void GstInterface::StartStream()
     this);
 
   std::cout << "CreatePipeLine finished." << std::endl;
-}
+}*/
 
 void GstInterface::StopStream(void)
 {
@@ -120,21 +120,21 @@ void GstInterface::BuildDefaultPipeline(
 
 void GstInterface::BuildPipeline()
 {
-  const bool is_udp_protocol = (streamAddress.find("udp://") == 0);
-  const std::string h26xparse = (encoderProfile == "H264") ? "h264parse" : "h265parse";
-  const std::string h26xencoder = (encoderProfile == "H264") ? "x264enc" : "x265enc";
-  const std::string gstFormat = (encoderProfile == "H264") ? "video/x-h264" : "video/x-h265";
+  const bool is_udp_protocol = (_streamAddress.find("udp://") == 0);
+  const std::string h26xparse = (_encoderProfile == "H264") ? "h264parse" : "h265parse";
+  const std::string h26xencoder = (_encoderProfile == "H264") ? "x264enc" : "x265enc";
+  const std::string gstFormat = (_encoderProfile == "H264") ? "video/x-h264" : "video/x-h265";
   std::string payload = " ";
   std::string sink{};
 
   if (is_udp_protocol) {
-    std::string host = DepthAIUtils::ReadIpFromUdpAddress(streamAddress);
-    int port = DepthAIUtils::ReadPortFromUdpAddress(streamAddress);
+    std::string host = DepthAIUtils::ReadIpFromUdpAddress(_streamAddress);
+    int port = DepthAIUtils::ReadPortFromUdpAddress(_streamAddress);
 
     sink = "udpsink host=" + host + " port=" + std::to_string(port) + " ";
-    payload = (encoderProfile == "H264") ? "! rtph264pay " : "! rtph265pay ";
+    payload = (_encoderProfile == "H264") ? "! rtph264pay " : "! rtph265pay ";
   } else {
-    sink = "rtspclientsink protocols=tcp tls-validation-flags=0 location=" + streamAddress;
+    sink = "rtspclientsink protocols=tcp tls-validation-flags=0 location=" + _streamAddress;
   }
 
   if (queue.empty()) {     // video-data is not available - use "default" video output
@@ -157,7 +157,7 @@ void GstInterface::BuildPipeline()
       return;
     }
     g_assert(_pipeline);
-    appSource = gst_bin_get_by_name(GST_BIN(_pipeline), "source");
+    _appSource = gst_bin_get_by_name(GST_BIN(_pipeline), "source");
     g_assert(_appSource);
     g_assert(GST_IS_APP_SRC(_appSource));
 
@@ -181,10 +181,10 @@ void GstInterface::BuildPipeline()
 
   _mLoopThread = g_thread_new("GstThread", (GThreadFunc)GstInterface::PlayStream, this);
 
-  _needDataSignalId = g_signal_connect(_appSource, "need-data", G_CALLBACK(NeedDataCallBack), this);
+  _needDataSignalId = g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
 }
 
-static void GstInterface::NeedDataCallBack(
+void GstInterface::NeedDataCallBack(
   GstElement * appsrc, guint unused_size,
   gpointer user_data)
 {
@@ -201,11 +201,11 @@ static void GstInterface::NeedDataCallBack(
     const auto stamp = videoPtr->header.stamp;
     const GstClockTime gst_stamp = stamp.sec * 1000000000UL + stamp.nanosec;
 
-    if (data->stamp0 == 0) {
-      data->stamp0 = gst_stamp;
+    if (data->_stamp0 == 0) {
+      data->_stamp0 = gst_stamp;
     }
 
-    const GstClockTime local_stamp = gst_stamp - data->stamp0;
+    const GstClockTime local_stamp = gst_stamp - data->_stamp0;
     GST_BUFFER_PTS(buffer) = local_stamp;
 
     const auto result = ::gst_app_src_push_buffer(GST_APP_SRC(data->_appSource), buffer);
@@ -215,7 +215,7 @@ static void GstInterface::NeedDataCallBack(
   }
 }
 
-static void * GstInterface::PlayStream(gpointer data)
+void * GstInterface::PlayStream(gpointer data)
 {
   GstInterface * gstImpl = (GstInterface *)data;
   std::cout << "PlayStream callback called." << std::endl;
@@ -232,7 +232,7 @@ static void * GstInterface::PlayStream(gpointer data)
   return nullptr;
 }
 
-static gboolean GstInterface::StreamPlayingRestartCallback(gpointer user_data)
+gboolean GstInterface::StreamPlayingRestartCallback(gpointer user_data)
 {
   GstInterface * gstImpl = (GstInterface *)user_data;
 
@@ -248,7 +248,7 @@ static gboolean GstInterface::StreamPlayingRestartCallback(gpointer user_data)
 }
 
 // Use this function to execute code when timer is removed.
-static void GstInterface::StreamPlayingRestartDone(gpointer user_data)
+void GstInterface::StreamPlayingRestartDone(gpointer user_data)
 {
   (void)user_data;
 }

@@ -5,6 +5,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <gstreamer_interface.hpp>
 
 namespace depthai_ctrl
 {
@@ -24,8 +25,7 @@ class DepthAIGStreamer : public rclcpp::Node
 
   private:
 
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    std::unique_ptr<GstInterface> _impl;
     rclcpp::Subscription<CompressedImageMsg>::SharedPtr _video_subscriber;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
 
