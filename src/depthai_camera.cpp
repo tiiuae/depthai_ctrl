@@ -157,6 +157,7 @@ void DepthAICamera::TryRestarting()
     // Setup Color Camera
     colorCamera->setBoardSocket(dai::CameraBoardSocket::RGB);
     colorCamera->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
+
     // Preview resolution cannot be larger than Video's, thus resolution color camera image is limited
     colorCamera->setPreviewSize(_videoWidth, _videoHeight);
     colorCamera->setVideoSize(_videoWidth, _videoHeight);
@@ -177,6 +178,7 @@ void DepthAICamera::TryRestarting()
     videoEncoder->bitstream.link(xoutVideo->input);
     auto xinColor = _pipeline->create<dai::node::XLinkIn>();
     xinColor->setStreamName("colorCamCtrl");
+    
 
     xinColor->out.link(colorCamera->inputControl);
 
@@ -190,11 +192,11 @@ void DepthAICamera::TryRestarting()
         _device.reset();
         return;
     }
-
+    _device->startPipeline();
     _colorCamInputQueue = _device->getInputQueue("colorCamCtrl");
     dai::CameraControl colorCamCtrl;
-    colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::AUTO);
-    //colorCamCtrl.setManualFocus(255);
+    colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::CONTINUOUS_VIDEO);
+    //colorCamCtrl.setManualFocus(0);
     _colorCamInputQueue->send(colorCamCtrl);
 
     if (_useRawColorCam){
@@ -213,6 +215,7 @@ void DepthAICamera::TryRestarting()
     
     auto _videoEncoderCallback = _videoQueue->addCallback(std::bind(&DepthAICamera::onVideoEncoderCallback, this, std::placeholders::_1, std::placeholders::_2));
     //_processing_thread = std::thread(&DepthAICamera::ProcessingThread, this);
+
 }
 
 void DepthAICamera::onLeftCamCallback(const std::string& stream_name, const std::shared_ptr<dai::ADatatype> data)
