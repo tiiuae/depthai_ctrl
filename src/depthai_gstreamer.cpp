@@ -116,7 +116,7 @@ void DepthAIGStreamer::Initialize()
 void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
   const auto stamp = video_msg->header.stamp;
-  RCLCPP_DEBUG(
+  RCLCPP_INFO(
     get_logger(),
     "RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec));
   

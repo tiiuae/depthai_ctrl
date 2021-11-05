@@ -215,10 +215,10 @@ void GstInterface::BuildPipeline()
   const std::string h26xencoder = (_encoderProfile == "H264") ? "x264enc" : "x265enc";
   const std::string gstFormat = (_encoderProfile == "H264") ? "video/x-h264" : "video/x-h265";
 
-  auto end_time = g_get_monotonic_time() + 5 * G_TIME_SPAN_SECOND;
+  /*auto end_time = g_get_monotonic_time() + 5 * G_TIME_SPAN_SECOND;
   g_mutex_lock(&haveDataCondMutex);
   while (queue.empty()) {
-    //std::cout << "Queue is empty!" << std::endl;
+    std::cout << "Queue is empty!" << std::endl;
     if (!g_cond_wait_until(&haveDataCond, &haveDataCondMutex, end_time))
     {
       std::cout << "Queue is empty and 5s timeout! Default pipeline will be used." << std::endl;
@@ -226,9 +226,9 @@ void GstInterface::BuildPipeline()
       break;
     }
   }
-  g_mutex_unlock(&haveDataCondMutex);
-
-  if (queue.empty()) {     // video-data is not available - use "default" video output
+  g_mutex_unlock(&haveDataCondMutex);*/
+  // DISABLE CHECK FOR NOW
+  if (queue.empty() and false) {     // video-data is not available - use "default" video output
     BuildDefaultPipeline();
   } else {
     _isStreamDefault = false;
