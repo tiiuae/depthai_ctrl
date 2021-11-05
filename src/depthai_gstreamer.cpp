@@ -18,7 +18,7 @@ using std::placeholders::_1;
 DepthAIGStreamer::DepthAIGStreamer(int argc, char * argv[])
 : Node("depthai_gstreamer"), _impl(nullptr)
 {
-    GstInterface::GstInterface* _impl(&argc, &argv);
+  _impl = new GstInterface(argc, argv);
   if (_impl != nullptr) {
     _impl = _impl;
   }
@@ -28,7 +28,8 @@ DepthAIGStreamer::DepthAIGStreamer(int argc, char * argv[])
 DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions & options)
 : Node("depthai_gstreamer", options), _impl(nullptr)
 {
-    GstInterface::GstInterface* _impl(nullptr, nullptr);
+  
+  _impl = new GstInterface(0, 0);
   if (_impl != nullptr) {
     _impl = _impl;
   }
@@ -96,18 +97,18 @@ void DepthAIGStreamer::Initialize()
   const std::string ns = std::string(get_namespace());
   declare_parameter<std::string>("address", default_stream_path + ns, address_desc);
 
-  _impl->encoderProfile = get_parameter("encoding").as_string();
-  _impl->streamAddress = get_parameter("address").as_string();
+  _impl->SetEncoderProfile(get_parameter("encoding").as_string());
+  _impl->SetStreamAddress(get_parameter("address").as_string());
 
   RCLCPP_DEBUG(get_logger(), "Namespace: %s", (default_stream_path + ns).c_str());
   RCLCPP_INFO(get_logger(), "DepthAI GStreamer 1.0.2 started.");
   RCLCPP_INFO(
     get_logger(), "Streaming %s to address: %s",
-    _impl->encoderProfile.c_str(), _impl->streamAddress.c_str());
+    _impl->GetEncoderProfile().c_str(), _impl->GetStreamAddress().c_str());
 
   if (get_parameter("start_stream_on_boot").as_bool()) {
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer: start video stream on boot");
-    _impl->StartStream();
+    _impl->BuildPipeline();
   }
 
 }
@@ -125,6 +126,9 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
     _impl->queue.pop();
   }
   _impl->queueMutex.unlock();
+  /*if (!_impl->IsStreamPlaying()) {
+    _impl->StartStream();
+  }*/
 }
 
 void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg)
@@ -137,7 +141,7 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
       command.begin(), command.end(), command.begin(),
       [](unsigned char c) {return std::tolower(c);});
     if (command == "start") {
-      if (!_impl->isStreamPlaying) {
+      if (!_impl->IsStreamPlaying()) {
         if (!cmd["Address"].empty()) {
           std::string res{};
           const std::string address = cmd["Address"];
@@ -145,7 +149,7 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
             RCLCPP_WARN(this->get_logger(), res);
             return;
           }
-          _impl->streamAddress = address;
+          _impl->SetStreamAddress(address);
         }
 
         if (!cmd["Encoding"].empty()) {
@@ -154,11 +158,11 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
             RCLCPP_WARN(this->get_logger(), "Wrong video encoding profile");
             return;
           }
-          _impl->encoderProfile = encoding;
+          _impl->SetEncoderProfile(encoding);
         }
 
         RCLCPP_INFO(this->get_logger(), "Start video streaming.");
-        _impl->StartStream();
+        _impl->BuildPipeline();
         return;
       }
       RCLCPP_INFO(this->get_logger(), "Video stream already running.");

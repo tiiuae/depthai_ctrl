@@ -8,7 +8,10 @@ GstInterface::GstInterface(int argc, char * argv[])
   _pipeline(nullptr), _appSource(nullptr), _encoderProfile("H264"),
   _busWatchId(0), _bus(nullptr), _needDataSignalId(0),
   _isStreamPlaying(false), _isStreamDefault(false), _encoderWidth(1280),
-  _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000), _rtspSink(nullptr)
+  _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000), _rtspSink(nullptr),
+  _udpSink(nullptr), _queue1(nullptr), _testSrc(nullptr), _textOverlay(nullptr),
+  _m26xEnc(nullptr), _testSrcFilter(nullptr), _h26xEncFilter(nullptr),
+  _h26xparse(nullptr), _h26xpay(nullptr)
 {
   _streamAddress = "";
   gst_init(&argc, &argv);
@@ -67,6 +70,16 @@ void GstInterface::StartStream()
   std::cout << "CreatePipeLine finished." << std::endl;
 }*/
 
+void GstInterface::StartStream(void)
+{
+  if (_isStreamPlaying) {
+    return;
+  }
+
+  std::cout << "Start stream called!" << std::endl;
+  
+
+}
 void GstInterface::StopStream(void)
 {
   GstFlowReturn ret;
@@ -136,13 +149,12 @@ void GstInterface::BuildPipeline()
   } else {
     sink = "rtspclientsink protocols=tcp tls-validation-flags=0 location=" + _streamAddress;
   }
-
-  if (queue.empty()) {     // video-data is not available - use "default" video output
+  if (queue.empty() and false) {     // video-data is not available - use "default" video output
     BuildDefaultPipeline(h26xencoder, sink, payload);
   } else {
     _isStreamDefault = false;
 
-    const std::string pipeline_string = "appsrc name=source ! " + h26xparse + " " + payload + "! " +
+    const std::string pipeline_string = "appsrc name=source !  " + h26xparse + " ! queue " + payload + "! " +
       sink;
     std::cout << "Starting pipeline:" << std::endl;
     std::cout << pipeline_string << std::endl;
@@ -178,10 +190,12 @@ void GstInterface::BuildPipeline()
   _busWatchId = gst_bus_add_watch(_bus, GstInterface::StreamEventCallBack, this);
   gst_object_unref(_bus);
   _bus = nullptr;
-
   _mLoopThread = g_thread_new("GstThread", (GThreadFunc)GstInterface::PlayStream, this);
 
-  _needDataSignalId = g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
+  // _needDataSignalId =
+  // g_signal_connect(_appSource, "need-data", G_CALLBACK(NeedDataCallBack), this);
+  
+
 }
 
 void GstInterface::NeedDataCallBack(
@@ -189,6 +203,9 @@ void GstInterface::NeedDataCallBack(
   gpointer user_data)
 {
   GstInterface * data = (GstInterface *)user_data;
+  GstFlowReturn result;
+
+  std::cout << "Need data called!" << std::endl;
   if (!data->queue.empty() && !data->_isStreamDefault) {
     auto videoPtr = data->queue.front();
     data->queueMutex.lock();
@@ -208,7 +225,9 @@ void GstInterface::NeedDataCallBack(
     const GstClockTime local_stamp = gst_stamp - data->_stamp0;
     GST_BUFFER_PTS(buffer) = local_stamp;
 
-    const auto result = ::gst_app_src_push_buffer(GST_APP_SRC(data->_appSource), buffer);
+    g_signal_emit_by_name(appsrc, "push-buffer", buffer, &result);
+    gst_buffer_unref(buffer);
+    //const auto result = ::gst_app_src_push_buffer(GST_APP_SRC(data->_appSource), buffer);
     std::cout << "Submitted: " << gst_stamp << " local=" << local_stamp << ": " << std::to_string(
       result) <<
       std::endl;
@@ -223,9 +242,22 @@ void * GstInterface::PlayStream(gpointer data)
   // if (depthAICam != nullptr) {
   //     depthAICam->StartStreaming();
   // }
+
+  if (gstImpl->queue.empty())
+  {
+    std::cout << "PlayStream callback called with empty queue." << std::endl;
+      // wait 1 sec in case we have delay in ros
+      g_usleep(1000000);
+      std::cout << "Waiting 1 sec for ros to start streaming." << std::endl;
+      //std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
   std::cout << "GStreamer(PlayStream): Pipeline Change State Playing" << std::endl;
 
   gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);
+  gstImpl->_isStreamPlaying = true;
+    gstImpl->_needDataSignalId =
+  g_signal_connect(gstImpl->_appSource, "need-data", G_CALLBACK(NeedDataCallBack), gstImpl);
+  
   g_main_loop_run(gstImpl->_mLoop);
   g_thread_exit(gstImpl->_mLoopThread);
 

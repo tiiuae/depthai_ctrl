@@ -52,6 +52,13 @@ public:
   //!
   void Init();
 
+  //! @brief Start the stream
+  //! Invoked when there is at least one message in the queue.
+  //! Calls PlayStream method and connects need-data signal to the callback
+  //! @return void
+  //!
+  void StartStream();
+
   //! @brief Stop the stream
   //! Disconnect signal handler, set state to GST_STATE_NULL,
   //! Quit the gstreamer main loop and set isStreamPlaying to false.
@@ -170,6 +177,26 @@ public:
         NULL);
     }
   }
+
+  //! @brief Return encoder profile
+  //! @return encoder profile
+  //!
+  const std::string & GetStreamAddress() {return _streamAddress;}
+
+  //! @brief Return is stream playing private boolean.
+  //! @return true if stream is playing, false otherwise.
+  //!
+  bool IsStreamPlaying() {return _isStreamPlaying;}
+
+  //! @brief Return is stream default private boolean.
+  //! @return true if stream is default, false otherwise.
+  //!
+  bool IsStreamDefault() {return _isStreamDefault;}
+
+  //! @brief Incoming message queue, shared with ROS2 node.
+  std::queue<CompressedImageMsg::SharedPtr> queue {};
+  //! @brief Mutex for the incoming message queue.
+  std::mutex queueMutex {};
 
 protected:
   //! @brief GThreadFunc for gstreamer main loop
@@ -377,21 +404,8 @@ protected:
   //!
   static void StreamPlayingRestartDone(gpointer user_data);
 
-  //! @brief Return is stream playing private boolean.
-  //! @return true if stream is playing, false otherwise.
-  //!
-  bool IsStreamPlaying() {return _isStreamPlaying;}
-
-  //! @brief Return is stream default private boolean.
-  //! @return true if stream is default, false otherwise.
-  //!
-  bool IsStreamDefault() {return _isStreamDefault;}
 
 
-  //! @brief Incoming message queue, shared with ROS2 node.
-  std::queue<CompressedImageMsg::SharedPtr> queue {};
-  //! @brief Mutex for the incoming message queue.
-  std::mutex queueMutex {};
 
 private:
   //! @brief The gst pipeline element
@@ -421,8 +435,18 @@ private:
   //! @brief stream address, either starts with udp:// or rtsps://
   std::string _streamAddress {};
 
-  GstElement * _rtspSink {};
 
+
+  GstElement *_testSrc;
+  GstElement *_textOverlay;
+  GstElement *_m26xEnc;
+  GstElement *_testSrcFilter;
+  GstElement *_h26xEncFilter;
+  GstElement *_h26xparse;
+  GstElement *_h26xpay;
+  GstElement *_udpSink;
+  GstElement *_queue1;
+  GstElement * _rtspSink;
   int _encoderWidth;
   int _encoderHeight;
   int _encoderFps;

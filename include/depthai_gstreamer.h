@@ -25,7 +25,7 @@ class DepthAIGStreamer : public rclcpp::Node
 
   private:
 
-    std::unique_ptr<GstInterface> _impl;
+    GstInterface *_impl;
     rclcpp::Subscription<CompressedImageMsg>::SharedPtr _video_subscriber;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
 
