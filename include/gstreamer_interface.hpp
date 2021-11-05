@@ -3,6 +3,7 @@
 #include <memory>
 #include <thread>
 #include <iostream>
+#include <sstream>
 #include <chrono>
 #include <stdlib.h>
 #include <functional>
@@ -75,9 +76,7 @@ public:
   //! This default pipeline creates an empty image with "Camera not detected"
   //! @return void
   //!
-  void BuildDefaultPipeline(
-    const std::string & h26xencoder, const std::string & sink,
-    const std::string & payload);
+  void BuildDefaultPipeline();
 
   //! @brief Build pipeline in GstInterface
   //! @return void
@@ -197,6 +196,12 @@ public:
   std::queue<CompressedImageMsg::SharedPtr> queue {};
   //! @brief Mutex for the incoming message queue.
   std::mutex queueMutex {};
+
+  GCond haveDataCond {};
+  GMutex haveDataCondMutex {};
+
+  GCond startStreamingCond {};
+  GMutex startStreamingCondMutex {};
 
 protected:
   //! @brief GThreadFunc for gstreamer main loop
@@ -439,7 +444,7 @@ private:
 
   GstElement *_testSrc;
   GstElement *_textOverlay;
-  GstElement *_m26xEnc;
+  GstElement *_h26xEnc;
   GstElement *_testSrcFilter;
   GstElement *_h26xEncFilter;
   GstElement *_h26xparse;

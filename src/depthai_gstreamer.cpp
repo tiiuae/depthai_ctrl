@@ -116,9 +116,11 @@ void DepthAIGStreamer::Initialize()
 void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
   const auto stamp = video_msg->header.stamp;
-  RCLCPP_INFO(
+  RCLCPP_DEBUG(
     get_logger(),
     "RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec));
+  
+    g_mutex_lock(&_impl->haveDataCondMutex);
   _impl->queueMutex.lock();
   _impl->queue.push(video_msg);
   // When message queue is too big - delete old messages
@@ -126,6 +128,8 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
     _impl->queue.pop();
   }
   _impl->queueMutex.unlock();
+    g_cond_signal(&_impl->haveDataCond);
+    g_mutex_unlock(&_impl->haveDataCondMutex);
   /*if (!_impl->IsStreamPlaying()) {
     _impl->StartStream();
   }*/
