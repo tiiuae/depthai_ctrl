@@ -11,7 +11,7 @@ GstInterface::GstInterface(int argc, char * argv[])
   _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000), _rtspSink(nullptr),
   _udpSink(nullptr), _queue1(nullptr), _testSrc(nullptr), _textOverlay(nullptr),
   _h26xEnc(nullptr), _testSrcFilter(nullptr), _h26xEncFilter(nullptr),
-  _h26xparse(nullptr), _h26xpay(nullptr)
+  _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr)
 {
   _streamAddress = "";
   gst_init(&argc, &argv);
@@ -53,6 +53,9 @@ GstInterface::~GstInterface()
   if (_mLoopThread) {
     g_thread_join(_mLoopThread);
   }
+  if (_mCreatePipelineThread) {
+    g_thread_join(_mCreatePipelineThread);
+  }
   if (_mLoopContext) {
     g_main_context_unref(_mLoopContext);
   }
@@ -66,6 +69,7 @@ void GstInterface::StartStream(void)
   }
 
   std::cout << "Start stream called!" << std::endl;
+  _mCreatePipelineThread = g_thread_new("GstThreadCreatePipeline", (GThreadFunc)GstInterface::CreatePipeline, this);
 
 
 }
@@ -91,6 +95,9 @@ void GstInterface::StopStream(void)
   if (_mLoopThread != nullptr) {
     g_thread_join(_mLoopThread);
   }
+  if (_mCreatePipelineThread) {
+    g_thread_join(_mCreatePipelineThread);
+  }
   _isStreamPlaying = false;
 }
 
@@ -102,7 +109,7 @@ void GstInterface::BuildDefaultPipeline()
 
   // Video test source.
   _testSrc = gst_element_factory_make("videotestsrc", "source");
-  g_object_set(G_OBJECT(_testSrc), "pattern", 2, NULL);
+  g_object_set(G_OBJECT(_testSrc), "pattern", 16, NULL);
   _testSrcFilter = gst_element_factory_make("capsfilter", "source_filter");
   g_object_set(
     G_OBJECT(_testSrcFilter), "caps",
@@ -111,7 +118,7 @@ void GstInterface::BuildDefaultPipeline()
       "format", G_TYPE_STRING, "I420",
       "width", G_TYPE_INT, _encoderWidth,
       "height", G_TYPE_INT, _encoderHeight,
-      "framerate", GST_TYPE_FRACTION, _encoderFps, 1,
+      "framerate", GST_TYPE_FRACTION, _encoderFps, _encoderFps,
       NULL), NULL);
 
   // Text overlay.
@@ -127,15 +134,21 @@ void GstInterface::BuildDefaultPipeline()
   // Software encoder and parser.
   if (_encoderProfile == "H265") {
     _h26xEnc = gst_element_factory_make("x265enc", "encoder");
-    g_object_set(
+    /*g_object_set(
       G_OBJECT(_h26xEnc),
       "bitrate", 500,               // 500 kbit/sec
       "speed-preset", 2,               // 2 = superfast
-      "tune", 4,               // 4 = zerolatency
-      NULL);
+      "tune", 5,               // 4 = zero latency 5 = fast decode 
+      NULL);*/
     _h26xparse = gst_element_factory_make("h265parse", "parser");
   } else {
     _h26xEnc = gst_element_factory_make("x264enc", "encoder");
+    /*g_object_set(
+      G_OBJECT(_h26xEnc),
+      "bitrate", 500,               // 500 kbit/sec
+      "speed-preset", 1,               // 1 = ultra fast 2 = superfast
+      "tune", 2,               // 1 = still image 2 = fast decode 4 = zero latency
+      NULL);*/
     _h26xparse = gst_element_factory_make("h264parse", "parser");
   }
 
@@ -174,6 +187,17 @@ void GstInterface::BuildDefaultPipeline()
   ss << "video/x-" << profile;
   ss >> gstFormat;
   _h26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
+  if (_encoderProfile == "H265") {
+  g_object_set(
+    G_OBJECT(_h26xEncFilter), "caps",
+    gst_caps_new_simple(
+      gstFormat.c_str(),
+      //"profile", G_TYPE_STRING, "baseline",
+      "tune", G_TYPE_STRING, "zero-latency",
+      "speed-preset", G_TYPE_STRING, "superfast",
+      //"bitrate", G_TYPE_INT, 4000,
+      NULL), NULL);
+  } else {
   g_object_set(
     G_OBJECT(_h26xEncFilter), "caps",
     gst_caps_new_simple(
@@ -185,8 +209,9 @@ void GstInterface::BuildDefaultPipeline()
       "threads", G_TYPE_INT, 0,
       "speed-preset", G_TYPE_STRING, "superfast",
       "subme", G_TYPE_INT, 1,
-      "bitrate", G_TYPE_INT, 4000,
+      //"bitrate", G_TYPE_INT, 4000,
       NULL), NULL);
+  }
   g_assert(_pipeline);
 
   if (is_udp_protocol) {
@@ -206,6 +231,8 @@ void GstInterface::BuildDefaultPipeline()
       _testSrc, _testSrcFilter, _textOverlay, _h26xEnc, _h26xEncFilter,
       _h26xparse, _rtspSink, NULL);
   }
+
+    GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_test");
 }
 
 void GstInterface::BuildPipeline()
@@ -215,23 +242,9 @@ void GstInterface::BuildPipeline()
   const std::string h26xencoder = (_encoderProfile == "H264") ? "x264enc" : "x265enc";
   const std::string gstFormat = (_encoderProfile == "H264") ? "video/x-h264" : "video/x-h265";
 
-  /*auto end_time = g_get_monotonic_time() + 5 * G_TIME_SPAN_SECOND;
-  g_mutex_lock(&haveDataCondMutex);
-  while (queue.empty()) {
-    std::cout << "Queue is empty!" << std::endl;
-    if (!g_cond_wait_until(&haveDataCond, &haveDataCondMutex, end_time))
-    {
-      std::cout << "Queue is empty and 5s timeout! Default pipeline will be used." << std::endl;
-      //g_mutex_unlock(&data->haveDataCondMutex);
-      break;
-    }
-  }
-  g_mutex_unlock(&haveDataCondMutex);*/
-  // DISABLE CHECK FOR NOW
-  if (queue.empty() and false) {     // video-data is not available - use "default" video output
+  if (_isStreamDefault) {     // video-data is not available - use "default" video output
     BuildDefaultPipeline();
   } else {
-    _isStreamDefault = false;
 
     _pipeline = gst_pipeline_new("rgbCamSink_pipeline");
     // Source element.
@@ -315,6 +328,10 @@ void GstInterface::BuildPipeline()
           _pipeline), _appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
       gst_element_link_many(_appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
     }
+  _needDataSignalId =
+    g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
+    GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_camera");
+
   }
 
   _bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
@@ -324,9 +341,6 @@ void GstInterface::BuildPipeline()
 
   _mLoopThread = g_thread_new("GstThread", (GThreadFunc)GstInterface::PlayStream, this);
 
-
-  _needDataSignalId =
-    g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
 
   // _needDataSignalId =
   // g_signal_connect(_appSource, "need-data", G_CALLBACK(NeedDataCallBack), this);
@@ -381,6 +395,28 @@ std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 }
 
+void * GstInterface::CreatePipeline(gpointer data)
+{
+  GstInterface * gst = (GstInterface *)data;
+
+  gint64 end_time;
+  end_time = g_get_monotonic_time() + 2 * G_TIME_SPAN_SECOND;
+  g_mutex_lock(&gst->haveDataCondMutex);
+  while (gst->queue.empty()) {
+    if (!g_cond_wait_until(&gst->haveDataCond, &gst->haveDataCondMutex, end_time)) {
+      std::cout << "Queue is empty after timeout! Building default pipeline." << std::endl;
+      gst->_isStreamDefault = true;
+      break;
+    }
+  }
+  g_mutex_unlock(&gst->haveDataCondMutex);
+  gst->BuildPipeline();
+
+  g_thread_exit(gst->_mCreatePipelineThread);
+  return nullptr;
+}
+
+
 void * GstInterface::PlayStream(gpointer data)
 {
   GstInterface * gstImpl = (GstInterface *)data;
@@ -401,7 +437,6 @@ std::this_thread::sleep_for(std::chrono::milliseconds(10));
   gstImpl->_isStreamPlaying = true;
   g_main_loop_run(gstImpl->_mLoop);
   g_thread_exit(gstImpl->_mLoopThread);
-
   return nullptr;
 }
 

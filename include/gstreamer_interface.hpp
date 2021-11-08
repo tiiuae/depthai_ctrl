@@ -210,6 +210,8 @@ protected:
   //!
   static void * PlayStream(gpointer data);
 
+static void * CreatePipeline(gpointer data);
+
   //! @brief Missing plugin message, used by StreamEventCallback
   //! @param[in] msg - GstMessage object
   //! @return true if plugin is missing
@@ -431,6 +433,8 @@ private:
   bool _isStreamDefault = false;
   //! @brief The main gst loop context
   GMainContext * _mLoopContext;
+  //! @brief Pipeline creating thread, only ran once
+  GThread * _mCreatePipelineThread;
   //! @brief The main gst loop thread
   GThread * _mLoopThread;
   //! @brief the main gst loop
