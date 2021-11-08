@@ -69,7 +69,9 @@ void GstInterface::StartStream(void)
   }
 
   std::cout << "Start stream called!" << std::endl;
-  _mCreatePipelineThread = g_thread_new("GstThreadCreatePipeline", (GThreadFunc)GstInterface::CreatePipeline, this);
+  _mCreatePipelineThread = g_thread_new(
+    "GstThreadCreatePipeline",
+    (GThreadFunc)GstInterface::CreatePipeline, this);
 
 
 }
@@ -138,7 +140,7 @@ void GstInterface::BuildDefaultPipeline()
       G_OBJECT(_h26xEnc),
       "bitrate", 500,               // 500 kbit/sec
       "speed-preset", 2,               // 2 = superfast
-      "tune", 5,               // 4 = zero latency 5 = fast decode 
+      "tune", 5,               // 4 = zero latency 5 = fast decode
       NULL);*/
     _h26xparse = gst_element_factory_make("h265parse", "parser");
   } else {
@@ -187,17 +189,6 @@ void GstInterface::BuildDefaultPipeline()
   ss << "video/x-" << profile;
   ss >> gstFormat;
   _h26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
-  if (_encoderProfile == "H265") {
-  g_object_set(
-    G_OBJECT(_h26xEncFilter), "caps",
-    gst_caps_new_simple(
-      gstFormat.c_str(),
-      //"profile", G_TYPE_STRING, "baseline",
-      "tune", G_TYPE_STRING, "zero-latency",
-      "speed-preset", G_TYPE_STRING, "superfast",
-      //"bitrate", G_TYPE_INT, 4000,
-      NULL), NULL);
-  } else {
   g_object_set(
     G_OBJECT(_h26xEncFilter), "caps",
     gst_caps_new_simple(
@@ -209,9 +200,8 @@ void GstInterface::BuildDefaultPipeline()
       "threads", G_TYPE_INT, 0,
       "speed-preset", G_TYPE_STRING, "superfast",
       "subme", G_TYPE_INT, 1,
-      //"bitrate", G_TYPE_INT, 4000,
+      "bitrate", G_TYPE_INT, 4000,
       NULL), NULL);
-  }
   g_assert(_pipeline);
 
   if (is_udp_protocol) {
@@ -232,7 +222,7 @@ void GstInterface::BuildDefaultPipeline()
       _h26xparse, _rtspSink, NULL);
   }
 
-    GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_test");
+  GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_test");
 }
 
 void GstInterface::BuildPipeline()
@@ -328,8 +318,8 @@ void GstInterface::BuildPipeline()
           _pipeline), _appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
       gst_element_link_many(_appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
     }
-  _needDataSignalId =
-    g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
+    _needDataSignalId =
+      g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
     GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_camera");
 
   }
