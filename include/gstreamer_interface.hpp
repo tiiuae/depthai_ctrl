@@ -54,8 +54,7 @@ public:
   void Init();
 
   //! @brief Start the stream
-  //! Invoked when there is at least one message in the queue.
-  //! Calls PlayStream method and connects need-data signal to the callback
+  //! Creates a g_thread for CreatePipeline method
   //! @return void
   //!
   void StartStream();
@@ -194,12 +193,15 @@ public:
 
   //! @brief Incoming message queue, shared with ROS2 node.
   std::queue<CompressedImageMsg::SharedPtr> queue {};
-  //! @brief Mutex for the incoming message queue.
+  //! @brief Mutex for the incoming message queue. (Not used)
   std::mutex queueMutex {};
 
+  //! @brief GCond for queue
   GCond haveDataCond {};
   GMutex haveDataCondMutex {};
 
+  //! @brief Gcond to start stream, however not used.
+  //! It is being managed by haveDataCond
   GCond startStreamingCond {};
   GMutex startStreamingCondMutex {};
 
@@ -210,7 +212,14 @@ protected:
   //!
   static void * PlayStream(gpointer data);
 
-static void * CreatePipeline(gpointer data);
+  //! @brief Create pipeline for the stream
+  //! This function is called from StartStream function in a g_thread
+  //! It waits two seconds for the data to be received from the ROS2 node
+  //! If no data is received, it will create a default pipeline(Camera Not Found! stream)
+  //! otherwise normal stream from camera
+  //! @param[in] data - GstInterface object
+  //! @return void
+  static void * CreatePipeline(gpointer data);
 
   //! @brief Missing plugin message, used by StreamEventCallback
   //! @param[in] msg - GstMessage object
@@ -270,14 +279,23 @@ static void * CreatePipeline(gpointer data);
         gst_message_parse_progress(message, &progressType, &code, &text);
         switch (progressType) {
           case GST_PROGRESS_TYPE_START:
+            g_print("Progress: (%s) %s (Start)\n", code, text);
+            break;
           case GST_PROGRESS_TYPE_CONTINUE:
+            g_print("Progress: (%s) %s (Continue)\n", code, text);
+            break;
           case GST_PROGRESS_TYPE_COMPLETE:
+            g_print("Progress: (%s) %s (Complete)\n", code, text);
+            break;
           case GST_PROGRESS_TYPE_CANCELED:
+            g_print("Progress: (%s) %s (Canceled)\n", code, text);
+            break;
           case GST_PROGRESS_TYPE_ERROR:
+            g_print("Progress: (%s) %s (Error)\n", code, text);
+            break;
           default:
             break;
         }
-        g_print("Progress: (%s) %s\n", code, text);
         g_free(code);
         g_free(text);
         break;
@@ -411,9 +429,6 @@ static void * CreatePipeline(gpointer data);
   //!
   static void StreamPlayingRestartDone(gpointer user_data);
 
-
-
-
 private:
   //! @brief The gst pipeline element
   GstElement * _pipeline {};
@@ -431,6 +446,8 @@ private:
   bool _isStreamPlaying = false;
   //! @brief is stream default private boolean
   bool _isStreamDefault = false;
+  //! @brief is stream shutdown started flag
+  bool _isStreamShutdown = false;
   //! @brief The main gst loop context
   GMainContext * _mLoopContext;
   //! @brief Pipeline creating thread, only ran once
@@ -445,16 +462,15 @@ private:
   std::string _streamAddress {};
 
 
-
-  GstElement *_testSrc;
-  GstElement *_textOverlay;
-  GstElement *_h26xEnc;
-  GstElement *_testSrcFilter;
-  GstElement *_h26xEncFilter;
-  GstElement *_h26xparse;
-  GstElement *_h26xpay;
-  GstElement *_udpSink;
-  GstElement *_queue1;
+  GstElement * _testSrc;
+  GstElement * _textOverlay;
+  GstElement * _h26xEnc;
+  GstElement * _testSrcFilter;
+  GstElement * _h26xEncFilter;
+  GstElement * _h26xparse;
+  GstElement * _h26xpay;
+  GstElement * _udpSink;
+  GstElement * _queue1;
   GstElement * _rtspSink;
   int _encoderWidth;
   int _encoderHeight;

@@ -11,7 +11,8 @@ GstInterface::GstInterface(int argc, char * argv[])
   _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000), _rtspSink(nullptr),
   _udpSink(nullptr), _queue1(nullptr), _testSrc(nullptr), _textOverlay(nullptr),
   _h26xEnc(nullptr), _testSrcFilter(nullptr), _h26xEncFilter(nullptr),
-  _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr)
+  _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr),
+  _isStreamShutdown(false)
 {
   _streamAddress = "";
   gst_init(&argc, &argv);
@@ -23,43 +24,7 @@ GstInterface::GstInterface(int argc, char * argv[])
 
 GstInterface::~GstInterface()
 {
-  GstFlowReturn ret;
-  if (_needDataSignalId != 0) {
-    g_signal_handler_disconnect(_appSource, _needDataSignalId);
-  }
-  if (_appSource != nullptr) {
-    g_signal_emit_by_name(_appSource, "end-of-stream", &ret);
-    if (ret != GST_FLOW_OK) {
-      g_printerr("Error: Emit end-of-stream failed\n");
-    }
-  }
-  if (_pipeline) {
-    gst_element_set_state(_pipeline, GST_STATE_NULL);
-    gst_object_unref(_pipeline);
-    _pipeline = nullptr;
-  }
-  if (_bus) {
-    gst_bus_remove_watch(_bus);
-    gst_object_unref(_bus);
-  }
-  if (_busWatchId != 0) {
-    g_source_remove(_busWatchId);
-    _busWatchId = 0;
-  }
-  if (_mLoop) {
-    g_main_loop_quit(_mLoop);
-    _mLoop = nullptr;
-  }
-  if (_mLoopThread) {
-    g_thread_join(_mLoopThread);
-  }
-  if (_mCreatePipelineThread) {
-    g_thread_join(_mCreatePipelineThread);
-  }
-  if (_mLoopContext) {
-    g_main_context_unref(_mLoopContext);
-  }
-  _isStreamPlaying = false;
+  StopStream();
 }
 
 void GstInterface::StartStream(void)
@@ -67,38 +32,69 @@ void GstInterface::StartStream(void)
   if (_isStreamPlaying) {
     return;
   }
+  _isStreamShutdown = false;
+  _isStreamPlaying = true;
 
   std::cout << "Start stream called!" << std::endl;
-  _mCreatePipelineThread = g_thread_new("GstThreadCreatePipeline", (GThreadFunc)GstInterface::CreatePipeline, this);
-
+  _mCreatePipelineThread = g_thread_new(
+    "GstThreadCreatePipeline",
+    (GThreadFunc)GstInterface::CreatePipeline, this);
 
 }
 void GstInterface::StopStream(void)
 {
   GstFlowReturn ret;
-
-  if (_needDataSignalId != 0) {
-    g_signal_handler_disconnect(_appSource, _needDataSignalId);
-  }
+  std::cout << "Sending end-of-stream!" << std::endl;
+  _isStreamShutdown = true;
+  _isStreamPlaying = false;
+  std::cout << "Broadcasting the GCond signal to unlock have-data!" << std::endl;
+  g_cond_broadcast(&haveDataCond);
   if (_appSource != nullptr) {
     g_signal_emit_by_name(_appSource, "end-of-stream", &ret);
     if (ret != GST_FLOW_OK) {
       g_printerr("Error: Emit end-of-stream failed\n");
+    } else {
+      std::cout << "End-of-stream sent!" << std::endl;
     }
   }
-  if (_pipeline != nullptr) {
-    gst_element_set_state(_pipeline, GST_STATE_NULL);
+
+  std::cout << "Disconnecting signal!" << std::endl;
+  if (_needDataSignalId != 0) {
+    g_signal_handler_disconnect(_appSource, _needDataSignalId);
+    _needDataSignalId = 0;
   }
+  std::cout << "Unreferencing bus element!" << std::endl;
+  if (_bus) {
+    gst_bus_remove_watch(_bus);
+    gst_object_unref(_bus);
+    _bus = nullptr;
+  }
+  if (_pipeline != nullptr) {
+    std::cout << "Setting pipeline state to NULL!" << std::endl;
+    gst_element_set_state(_pipeline, GST_STATE_NULL);
+    std::cout << "Unreferencing pipeline element!" << std::endl;
+    gst_object_unref(GST_OBJECT(_pipeline));
+    _pipeline = nullptr;
+  }
+  if (_busWatchId != 0) {
+    g_source_remove(_busWatchId);
+    _busWatchId = 0;
+  }
+  std::cout << "Quitting main gst loop!" << std::endl;
   if (_mLoop != nullptr) {
     g_main_loop_quit(_mLoop);
   }
+  std::cout << "Quitting main loop thread!" << std::endl;
   if (_mLoopThread != nullptr) {
     g_thread_join(_mLoopThread);
+
   }
-  if (_mCreatePipelineThread) {
+  if (_mCreatePipelineThread != nullptr) {
     g_thread_join(_mCreatePipelineThread);
   }
-  _isStreamPlaying = false;
+  if (_mLoopContext) {
+    g_main_context_unref(_mLoopContext);
+  }
 }
 
 void GstInterface::BuildDefaultPipeline()
@@ -134,21 +130,15 @@ void GstInterface::BuildDefaultPipeline()
   // Software encoder and parser.
   if (_encoderProfile == "H265") {
     _h26xEnc = gst_element_factory_make("x265enc", "encoder");
-    /*g_object_set(
+    g_object_set(
       G_OBJECT(_h26xEnc),
       "bitrate", 500,               // 500 kbit/sec
       "speed-preset", 2,               // 2 = superfast
-      "tune", 5,               // 4 = zero latency 5 = fast decode 
-      NULL);*/
+      "tune", 4,               // 4 = zero latency 5 = fast decode
+      NULL);
     _h26xparse = gst_element_factory_make("h265parse", "parser");
   } else {
     _h26xEnc = gst_element_factory_make("x264enc", "encoder");
-    /*g_object_set(
-      G_OBJECT(_h26xEnc),
-      "bitrate", 500,               // 500 kbit/sec
-      "speed-preset", 1,               // 1 = ultra fast 2 = superfast
-      "tune", 2,               // 1 = still image 2 = fast decode 4 = zero latency
-      NULL);*/
     _h26xparse = gst_element_factory_make("h264parse", "parser");
   }
 
@@ -187,17 +177,6 @@ void GstInterface::BuildDefaultPipeline()
   ss << "video/x-" << profile;
   ss >> gstFormat;
   _h26xEncFilter = gst_element_factory_make("capsfilter", "encoder_filter");
-  if (_encoderProfile == "H265") {
-  g_object_set(
-    G_OBJECT(_h26xEncFilter), "caps",
-    gst_caps_new_simple(
-      gstFormat.c_str(),
-      //"profile", G_TYPE_STRING, "baseline",
-      "tune", G_TYPE_STRING, "zero-latency",
-      "speed-preset", G_TYPE_STRING, "superfast",
-      //"bitrate", G_TYPE_INT, 4000,
-      NULL), NULL);
-  } else {
   g_object_set(
     G_OBJECT(_h26xEncFilter), "caps",
     gst_caps_new_simple(
@@ -209,9 +188,8 @@ void GstInterface::BuildDefaultPipeline()
       "threads", G_TYPE_INT, 0,
       "speed-preset", G_TYPE_STRING, "superfast",
       "subme", G_TYPE_INT, 1,
-      //"bitrate", G_TYPE_INT, 4000,
+      "bitrate", G_TYPE_INT, 4000,
       NULL), NULL);
-  }
   g_assert(_pipeline);
 
   if (is_udp_protocol) {
@@ -232,7 +210,7 @@ void GstInterface::BuildDefaultPipeline()
       _h26xparse, _rtspSink, NULL);
   }
 
-    GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_test");
+  //GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_test");
 }
 
 void GstInterface::BuildPipeline()
@@ -328,9 +306,9 @@ void GstInterface::BuildPipeline()
           _pipeline), _appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
       gst_element_link_many(_appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
     }
-  _needDataSignalId =
-    g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
-    GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_camera");
+    _needDataSignalId =
+      g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
+    //GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_camera");
 
   }
 
@@ -342,10 +320,6 @@ void GstInterface::BuildPipeline()
   _mLoopThread = g_thread_new("GstThread", (GThreadFunc)GstInterface::PlayStream, this);
 
 
-  // _needDataSignalId =
-  // g_signal_connect(_appSource, "need-data", G_CALLBACK(NeedDataCallBack), this);
-
-
 }
 
 void GstInterface::NeedDataCallBack(
@@ -354,24 +328,25 @@ void GstInterface::NeedDataCallBack(
 {
   GstInterface * data = (GstInterface *)user_data;
   GstFlowReturn result;
-/*
-  while (data->queue.empty()) {
-    std::cout << "Need data called with empty queue! Sleeping 10ms" << std::endl;
-std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    //g_usleep(10000000); // 10ms
-  }*/
   //std::cout << "Need data called!" << std::endl;
   if (!data->_isStreamDefault) {
     g_mutex_lock(&data->haveDataCondMutex);
-    while (data->queue.empty()) {
+    while (data->queue.empty() and !data->_isStreamShutdown) {
       //std::cout << "Queue is empty!" << std::endl;
       g_cond_wait(&data->haveDataCond, &data->haveDataCondMutex);
     }
-    auto videoPtr = data->queue.front();
-    data->queueMutex.lock();
-    data->queue.pop();
-    data->queueMutex.unlock();
-    g_mutex_unlock(&data->haveDataCondMutex);
+    std::shared_ptr<sensor_msgs::msg::CompressedImage> videoPtr;
+    // Mutex might be locked here, if gstreamer is not able to process during shutdown.
+    if (data->_isStreamShutdown) {
+      //std::cout << "Shutdown is called, not processing data!" << std::endl;
+      g_mutex_unlock(&data->haveDataCondMutex);
+      return;
+    } else {
+      //std::cout << "Processing data!" << std::endl;
+      videoPtr = data->queue.front();
+      data->queue.pop();
+      g_mutex_unlock(&data->haveDataCondMutex);
+    }
 
     auto & frame = videoPtr->data;
     GstBuffer * buffer = gst_buffer_new_and_alloc(frame.size());
@@ -388,10 +363,6 @@ std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     g_signal_emit_by_name(appsrc, "push-buffer", buffer, &result);
     gst_buffer_unref(buffer);
-    //const auto result = ::gst_app_src_push_buffer(GST_APP_SRC(data->_appSource), buffer);
-    /*std::cout << "Submitted: " << gst_stamp << " local=" << local_stamp << ": " << std::to_string(
-      result) <<
-      std::endl;*/
   }
 }
 
@@ -410,8 +381,8 @@ void * GstInterface::CreatePipeline(gpointer data)
     }
   }
   g_mutex_unlock(&gst->haveDataCondMutex);
-  gst->BuildPipeline();
 
+  gst->BuildPipeline();
   g_thread_exit(gst->_mCreatePipelineThread);
   return nullptr;
 }
@@ -421,16 +392,7 @@ void * GstInterface::PlayStream(gpointer data)
 {
   GstInterface * gstImpl = (GstInterface *)data;
   std::cout << "PlayStream callback called." << std::endl;
-  // DepthAICam * depthAICam = depthAIGst->depthAICam;
-  // if (depthAICam != nullptr) {
-  //     depthAICam->StartStreaming();
-  // }
-/*
-  while (gstImpl->queue.empty()) {
-    std::cout << "PlayStream called with empty queue! Sleeping 10ms" << std::endl;
-std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    //g_usleep(10000000); // 10ms
-  }*/
+
   std::cout << "GStreamer(PlayStream): Pipeline Change State Playing" << std::endl;
 
   gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);

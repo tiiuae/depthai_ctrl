@@ -1,29 +1,28 @@
-/performancetest_depthai:
-  ros__parameters:
-    use_sim_time: false
 
-/performancetest/depthai_camera:
-  ros__parameters:
-    bitrate: 3000000
-    color_camera_topic: camera/color/image_raw
-    encoding: H264
-    fps: 25
-    height: 720
-    left_camera_topic: camera/left/image_raw
-    right_camera_topic: camera/right/image_raw
-    stream_control_topic: videostreamcmd
-    use_sim_time: false
-    video_stream_topic: camera/color/video
-    width: 1280
+/performancetest:
+  depthai_camera:
+    ros__parameters:
+      bitrate: 3000000
+      color_camera_topic: camera/color/image_raw
+      encoding: H264
+      fps: 25
+      height: 720
+      left_camera_topic: camera/left/image_raw
+      right_camera_topic: camera/right/image_raw
+      stream_control_topic: videostreamcmd
+      use_sim_time: false
+      video_stream_topic: camera/color/video
+      width: 1280
 
-/performancetest/depthai_gstreamer:
-  ros__parameters:
-    address: rtsps://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@video-stream.sacplatform.com:8555/performancetest
-    bitrate: 3000000
-    encoding: H264
-    fps: 25
-    height: 720
-    start_stream_on_boot: true
-    use_sim_time: false
-    video_stream_topic: camera/color/video
-    width: 1280
+/performancetest:
+  depthai_gstreamer:
+    ros__parameters:
+      address: rtsps://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@video-stream.sacplatform.com:8555/performancetest1
+      bitrate: 3000000
+      encoding: H264
+      fps: 25
+      height: 720
+      start_stream_on_boot: true
+      use_sim_time: false
+      video_stream_topic: camera/color/video
+      width: 1280
