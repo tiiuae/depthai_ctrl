@@ -38,7 +38,10 @@ DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions & options)
 
 DepthAIGStreamer::~DepthAIGStreamer()
 {
+  RCLCPP_INFO(get_logger(), "DepthAI GStreamer: stop stream called");
   _impl->StopStream();
+  //RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Destroying called");
+  //delete _impl;
 }
 
 //bool DepthAIGStreamer::isStreamPlaying() {return _impl->isStreamPlaying;}
@@ -108,7 +111,7 @@ void DepthAIGStreamer::Initialize()
 
   if (get_parameter("start_stream_on_boot").as_bool()) {
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer: start video stream on boot");
-    _impl->StartStream();
+    _impl->BuildPipeline();
   }
 
 }

@@ -316,7 +316,24 @@ static void * CreatePipeline(gpointer data);
           new_state == GST_STATE_PLAYING)
         {
           depthAIGst->_isStreamPlaying = true;
-        }
+        }/*
+        if (g_strrstr(GST_OBJECT_NAME(message->src), "appsrc") &&
+          new_state == GST_STATE_NULL)
+        {
+          depthAIGst->_isStreamPlaying = false;
+          if (depthAIGst->_pipeline != nullptr) {
+          std::cout << "Unreferencing pipeline element!" << std::endl;
+            gst_object_unref (GST_OBJECT(depthAIGst->_pipeline));
+          }
+          std::cout << "Quitting main gst loop!" << std::endl;  
+          if (depthAIGst->_mLoop != nullptr) {
+            g_main_loop_quit(depthAIGst->_mLoop);
+          }
+          std::cout << "Quitting main loop thread!" << std::endl;
+          if (depthAIGst->_mLoopThread != nullptr) {
+            g_thread_join(depthAIGst->_mLoopThread);
+          }
+        }*/
         break;
 
       case GST_MESSAGE_EOS:

@@ -33,6 +33,7 @@ int main(int argc, char * argv[])
     // It will only be interrupted by Ctrl-C.
     exec.spin();
 
+
     rclcpp::shutdown();
 
     return 0;
