@@ -108,7 +108,7 @@ void DepthAIGStreamer::Initialize()
 
   if (get_parameter("start_stream_on_boot").as_bool()) {
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer: start video stream on boot");
-    _impl->BuildPipeline();
+    _impl->StartStream();
   }
 
 }
@@ -116,7 +116,7 @@ void DepthAIGStreamer::Initialize()
 void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
   const auto stamp = video_msg->header.stamp;
-  RCLCPP_INFO(
+  RCLCPP_DEBUG(
     get_logger(),
     "RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec));
   
@@ -166,7 +166,7 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
         }
 
         RCLCPP_INFO(this->get_logger(), "Start video streaming.");
-        _impl->BuildPipeline();
+        _impl->StartStream();
         return;
       }
       RCLCPP_INFO(this->get_logger(), "Video stream already running.");
