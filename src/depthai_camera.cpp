@@ -64,7 +64,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
         std::string command = cmd["Command"];
         std::transform(
             command.begin(), command.end(), command.begin(), [](unsigned char c) { return std::tolower(c); });
-        if (command == "start")
+        if (command == "start" && !_thread_running)
         {
             int width = _videoWidth;
             int height = _videoHeight;
@@ -125,10 +125,10 @@ void DepthAICamera::TryRestarting()
     {
         _thread_running = false;
     }
-    if (_processing_thread.joinable())
+    /*if (_processing_thread.joinable())
     {
         _processing_thread.join();
-    }
+    }*/
 
     RCLCPP_INFO(this->get_logger(), "[%s]: (Re)Starting...", get_name());
 

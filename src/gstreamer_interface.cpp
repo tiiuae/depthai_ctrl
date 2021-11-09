@@ -32,6 +32,8 @@ void GstInterface::StartStream(void)
   if (_isStreamPlaying) {
     return;
   }
+  _isStreamShutdown = false;
+  _isStreamPlaying = true;
 
   std::cout << "Start stream called!" << std::endl;
   _mCreatePipelineThread = g_thread_new(
@@ -46,6 +48,7 @@ void GstInterface::StopStream(void)
   GstFlowReturn ret;
   std::cout << "Sending end-of-stream!" << std::endl;
   _isStreamShutdown = true;
+  _isStreamPlaying = false;
   std::cout << "Broadcasting the GCond signal to unlock have-data!" << std::endl;
   g_cond_broadcast(&haveDataCond);
   if (_appSource != nullptr) {
@@ -87,6 +90,7 @@ void GstInterface::StopStream(void)
   std::cout << "Quitting main loop thread!" << std::endl;
   if (_mLoopThread != nullptr) {
     g_thread_join(_mLoopThread);
+    
   }
   if (_mCreatePipelineThread != nullptr) {
     g_thread_join(_mCreatePipelineThread);
@@ -94,7 +98,6 @@ void GstInterface::StopStream(void)
   if (_mLoopContext) {
     g_main_context_unref(_mLoopContext);
   }
-  _isStreamPlaying = false;
 }
 
 void GstInterface::BuildDefaultPipeline()

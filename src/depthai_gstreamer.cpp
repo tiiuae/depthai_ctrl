@@ -127,7 +127,7 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
   //_impl->queueMutex.lock();
   _impl->queue.push(video_msg);
   // When message queue is too big - delete old messages
-  if (_impl->queue.size() > 1000) {
+  if (_impl->queue.size() > 100) {
     _impl->queue.pop();
   }
   //_impl->queueMutex.unlock();
@@ -174,8 +174,12 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
       }
       RCLCPP_INFO(this->get_logger(), "Video stream already running.");
     } else if (command == "stop") {
-      RCLCPP_INFO(this->get_logger(), "Stop video streaming.");
-      _impl->StopStream();
+      if (_impl->IsStreamPlaying()) {
+        RCLCPP_INFO(this->get_logger(), "Stop video streaming.");
+        _impl->StopStream();
+      } else {
+        RCLCPP_INFO(this->get_logger(), "Video stream already stopped.");
+      }
     } else {
       RCLCPP_INFO(this->get_logger(), "Unknown command: %s", command.c_str());
     }
