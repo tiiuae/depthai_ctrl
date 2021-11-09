@@ -125,10 +125,6 @@ void DepthAICamera::TryRestarting()
     {
         _thread_running = false;
     }
-    /*if (_processing_thread.joinable())
-    {
-        _processing_thread.join();
-    }*/
 
     RCLCPP_INFO(this->get_logger(), "[%s]: (Re)Starting...", get_name());
 
@@ -196,7 +192,7 @@ void DepthAICamera::TryRestarting()
     _colorCamInputQueue = _device->getInputQueue("colorCamCtrl");
     dai::CameraControl colorCamCtrl;
     colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::CONTINUOUS_VIDEO);
-    //colorCamCtrl.setManualFocus(0);
+    
     _colorCamInputQueue->send(colorCamCtrl);
 
     if (_useRawColorCam){
@@ -214,7 +210,6 @@ void DepthAICamera::TryRestarting()
     _thread_running = true;
     
     auto _videoEncoderCallback = _videoQueue->addCallback(std::bind(&DepthAICamera::onVideoEncoderCallback, this, std::placeholders::_1, std::placeholders::_2));
-    //_processing_thread = std::thread(&DepthAICamera::ProcessingThread, this);
 
 }
 
@@ -274,56 +269,6 @@ void DepthAICamera::onVideoEncoderCallback(const std::string& stream_name, const
         _lastFrameTimePoint = stamp.time_since_epoch().count();
     }   
 }
-/*
-void DepthAICamera::ProcessingThread()
-{
-    while (rclcpp::ok() && _thread_running && !_device->isClosed())
-    {   
-        if (_useMonoCams){
-            auto leftPtr = _leftQueue->tryGet<dai::ImgFrame>();
-            auto rightPtr = _rightQueue->tryGet<dai::ImgFrame>();
-            if (leftPtr != nullptr)
-            {
-                auto image = ConvertImage(leftPtr, _left_camera_frame);
-                _left_publisher->publish(*image);
-            }
-            if (rightPtr != nullptr)
-            {
-                auto image = ConvertImage(rightPtr, _right_camera_frame);
-                _right_publisher->publish(*image);
-            }
-        }
-        auto colorPtr = _colorQueue->tryGet<dai::ImgFrame>();
-        auto videoPtr = _videoQueue->tryGet<dai::ImgFrame>();
-
-        if (colorPtr != nullptr and false)
-        {
-            auto image = ConvertImage(colorPtr, _color_camera_frame);
-            _color_publisher->publish(*image);
-        }
-            //RCLCPP_INFO(this->get_logger(), "[%s]: Published color cam image...", get_name());
-        if (videoPtr != nullptr)
-        {
-            const auto stamp = videoPtr->getTimestamp();
-            const int32_t sec = duration_cast<seconds>(stamp.time_since_epoch()).count();
-            const int32_t nsec = duration_cast<nanoseconds>(stamp.time_since_epoch()).count() % 1000000000UL;
-
-            CompressedImageMsg video_stream_chunk{};
-            video_stream_chunk.header.frame_id = _color_camera_frame;
-            video_stream_chunk.header.stamp = rclcpp::Time(sec, nsec, RCL_STEADY_TIME);
-            video_stream_chunk.data.swap(videoPtr->getData());
-            video_stream_chunk.format = _videoH265 ? "H265" : "H264";
-            _video_publisher->publish(video_stream_chunk);
-
-            RCLCPP_INFO(this->get_logger(), "[%s]: Since last frame %d - Frame timestamp %ld", get_name(),
-                (this->get_clock()->now() - _lastFrameTime).nanoseconds(),
-                stamp.time_since_epoch().count()-_lastFrameTimePoint);
-            _lastFrameTime = this->get_clock()->now();
-            _lastFrameTimePoint = stamp.time_since_epoch().count();
-            //RCLCPP_INFO(this->get_logger(), "[%s]: Published video stream chunk...", get_name());
-        }
-    }
-}*/
 
 std::shared_ptr<DepthAICamera::ImageMsg> DepthAICamera::ConvertImage(const std::shared_ptr<dai::ImgFrame> input,
                                                                      const std::string& frame_id)

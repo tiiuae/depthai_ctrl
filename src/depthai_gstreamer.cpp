@@ -44,8 +44,6 @@ DepthAIGStreamer::~DepthAIGStreamer()
   delete _impl;
 }
 
-//bool DepthAIGStreamer::isStreamPlaying() {return _impl->isStreamPlaying;}
-//bool DepthAIGStreamer::isStreamDefault() {return _impl->isStreamDefault;}
 
 void DepthAIGStreamer::Initialize()
 {
@@ -124,18 +122,13 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
     "RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec));
   
     g_mutex_lock(&_impl->haveDataCondMutex);
-  //_impl->queueMutex.lock();
   _impl->queue.push(video_msg);
   // When message queue is too big - delete old messages
   if (_impl->queue.size() > 100) {
     _impl->queue.pop();
   }
-  //_impl->queueMutex.unlock();
     g_cond_signal(&_impl->haveDataCond);
     g_mutex_unlock(&_impl->haveDataCondMutex);
-  /*if (!_impl->IsStreamPlaying()) {
-    _impl->StartStream();
-  }*/
 }
 
 void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg)

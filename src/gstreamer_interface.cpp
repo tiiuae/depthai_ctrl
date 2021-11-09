@@ -40,8 +40,6 @@ void GstInterface::StartStream(void)
     "GstThreadCreatePipeline",
     (GThreadFunc)GstInterface::CreatePipeline, this);
 
-  //BuildPipeline();
-
 }
 void GstInterface::StopStream(void)
 {
@@ -52,11 +50,10 @@ void GstInterface::StopStream(void)
   std::cout << "Broadcasting the GCond signal to unlock have-data!" << std::endl;
   g_cond_broadcast(&haveDataCond);
   if (_appSource != nullptr) {
-    //gst_app_src_end_of_stream(GST_APP_SRC(_appSource));
     g_signal_emit_by_name(_appSource, "end-of-stream", &ret);
     if (ret != GST_FLOW_OK) {
       g_printerr("Error: Emit end-of-stream failed\n");
-    } else{
+    } else {
       std::cout << "End-of-stream sent!" << std::endl;
     }
   }
@@ -90,7 +87,7 @@ void GstInterface::StopStream(void)
   std::cout << "Quitting main loop thread!" << std::endl;
   if (_mLoopThread != nullptr) {
     g_thread_join(_mLoopThread);
-    
+
   }
   if (_mCreatePipelineThread != nullptr) {
     g_thread_join(_mCreatePipelineThread);
@@ -213,7 +210,7 @@ void GstInterface::BuildDefaultPipeline()
       _h26xparse, _rtspSink, NULL);
   }
 
-  GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_test");
+  //GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_test");
 }
 
 void GstInterface::BuildPipeline()
@@ -311,7 +308,7 @@ void GstInterface::BuildPipeline()
     }
     _needDataSignalId =
       g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
-    GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_camera");
+    //GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_camera");
 
   }
 
