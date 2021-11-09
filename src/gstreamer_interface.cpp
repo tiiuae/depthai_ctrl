@@ -11,7 +11,8 @@ GstInterface::GstInterface(int argc, char * argv[])
   _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000), _rtspSink(nullptr),
   _udpSink(nullptr), _queue1(nullptr), _testSrc(nullptr), _textOverlay(nullptr),
   _h26xEnc(nullptr), _testSrcFilter(nullptr), _h26xEncFilter(nullptr),
-  _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr)
+  _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr),
+  _isStreamShutdown(false)
 {
   _streamAddress = "";
   gst_init(&argc, &argv);
@@ -23,45 +24,7 @@ GstInterface::GstInterface(int argc, char * argv[])
 
 GstInterface::~GstInterface()
 {
-  std::cout << "Destroying GstInterface!" << std::endl;
-  GstFlowReturn ret;
-  if (_needDataSignalId != 0) {
-    g_signal_handler_disconnect(_appSource, _needDataSignalId);
-  }/*
-  if (_appSource != nullptr) {
-    g_signal_emit_by_name(_appSource, "end-of-stream", &ret);
-    if (ret != GST_FLOW_OK) {
-      g_printerr("Error: Emit end-of-stream failed\n");
-    }
-  }*/
-  if (_bus) {
-    //gst_bus_remove_watch(_bus);
-    gst_object_unref(_bus);
-    _bus = nullptr;
-  }
-  if (_pipeline) {
-    gst_element_set_state(_pipeline, GST_STATE_NULL);
-    gst_object_unref(_pipeline);
-    _pipeline = nullptr;
-  }
-  if (_busWatchId != 0) {
-    g_source_remove(_busWatchId);
-    _busWatchId = 0;
-  }
-  if (_mLoop) {
-    g_main_loop_quit(_mLoop);
-    _mLoop = nullptr;
-  }
-  if (_mLoopThread) {
-    g_thread_join(_mLoopThread);
-  }/*
-  if (_mCreatePipelineThread) {
-    g_thread_join(_mCreatePipelineThread);
-  }*/
-  if (_mLoopContext) {
-    g_main_context_unref(_mLoopContext);
-  }
-  _isStreamPlaying = false;
+  StopStream();
 }
 
 void GstInterface::StartStream(void)
@@ -75,42 +38,52 @@ void GstInterface::StartStream(void)
     "GstThreadCreatePipeline",
     (GThreadFunc)GstInterface::CreatePipeline, this);
 
-  BuildPipeline();
+  //BuildPipeline();
 
 }
 void GstInterface::StopStream(void)
 {
   GstFlowReturn ret;
+  std::cout << "Sending end-of-stream!" << std::endl;
+  _isStreamShutdown = true;
+  std::cout << "Broadcasting the GCond signal to unlock have-data!" << std::endl;
+  g_cond_broadcast(&haveDataCond);
+  if (_appSource != nullptr) {
+    //gst_app_src_end_of_stream(GST_APP_SRC(_appSource));
+    g_signal_emit_by_name(_appSource, "end-of-stream", &ret);
+    if (ret != GST_FLOW_OK) {
+      g_printerr("Error: Emit end-of-stream failed\n");
+    } else{
+      std::cout << "End-of-stream sent!" << std::endl;
+    }
+  }
 
   std::cout << "Disconnecting signal!" << std::endl;
   if (_needDataSignalId != 0) {
     g_signal_handler_disconnect(_appSource, _needDataSignalId);
     _needDataSignalId = 0;
-  }/*
-  std::cout << "Sending end-of-stream!" << std::endl;
-  if (_appSource != nullptr) {
-    g_signal_emit_by_name(_appSource, "end-of-stream", &ret);
-    if (ret != GST_FLOW_OK) {
-      g_printerr("Error: Emit end-of-stream failed\n");
-    }
-  }*/
+  }
   std::cout << "Unreferencing bus element!" << std::endl;
   if (_bus) {
-    //gst_bus_remove_watch(_bus);
+    gst_bus_remove_watch(_bus);
     gst_object_unref(_bus);
     _bus = nullptr;
   }
   if (_pipeline != nullptr) {
-  std::cout << "Setting pipeline state to NULL!" << std::endl;
+    std::cout << "Setting pipeline state to NULL!" << std::endl;
     gst_element_set_state(_pipeline, GST_STATE_NULL);
-  std::cout << "Unreferencing pipeline element!" << std::endl;
-    gst_object_unref (GST_OBJECT(_pipeline));
+    std::cout << "Unreferencing pipeline element!" << std::endl;
+    gst_object_unref(GST_OBJECT(_pipeline));
     _pipeline = nullptr;
   }
-  std::cout << "Quitting main gst loop!" << std::endl;  
+  if (_busWatchId != 0) {
+    g_source_remove(_busWatchId);
+    _busWatchId = 0;
+  }
+  std::cout << "Quitting main gst loop!" << std::endl;
   if (_mLoop != nullptr) {
     g_main_loop_quit(_mLoop);
-  }/*
+  }
   std::cout << "Quitting main loop thread!" << std::endl;
   if (_mLoopThread != nullptr) {
     g_thread_join(_mLoopThread);
@@ -120,7 +93,7 @@ void GstInterface::StopStream(void)
   }
   if (_mLoopContext) {
     g_main_context_unref(_mLoopContext);
-  }*/
+  }
   _isStreamPlaying = false;
 }
 
@@ -347,10 +320,6 @@ void GstInterface::BuildPipeline()
   _mLoopThread = g_thread_new("GstThread", (GThreadFunc)GstInterface::PlayStream, this);
 
 
-  // _needDataSignalId =
-  // g_signal_connect(_appSource, "need-data", G_CALLBACK(NeedDataCallBack), this);
-
-
 }
 
 void GstInterface::NeedDataCallBack(
@@ -359,17 +328,25 @@ void GstInterface::NeedDataCallBack(
 {
   GstInterface * data = (GstInterface *)user_data;
   GstFlowReturn result;
+  //std::cout << "Need data called!" << std::endl;
   if (!data->_isStreamDefault) {
     g_mutex_lock(&data->haveDataCondMutex);
-    while (data->queue.empty()) {
+    while (data->queue.empty() and !data->_isStreamShutdown) {
       //std::cout << "Queue is empty!" << std::endl;
       g_cond_wait(&data->haveDataCond, &data->haveDataCondMutex);
     }
-    auto videoPtr = data->queue.front();
-    data->queueMutex.lock();
-    data->queue.pop();
-    data->queueMutex.unlock();
-    g_mutex_unlock(&data->haveDataCondMutex);
+    std::shared_ptr<sensor_msgs::msg::CompressedImage> videoPtr;
+    // Mutex might be locked here, if gstreamer is not able to process during shutdown.
+    if (data->_isStreamShutdown) {
+      //std::cout << "Shutdown is called, not processing data!" << std::endl;
+      g_mutex_unlock(&data->haveDataCondMutex);
+      return;
+    } else {
+      //std::cout << "Processing data!" << std::endl;
+      videoPtr = data->queue.front();
+      data->queue.pop();
+      g_mutex_unlock(&data->haveDataCondMutex);
+    }
 
     auto & frame = videoPtr->data;
     GstBuffer * buffer = gst_buffer_new_and_alloc(frame.size());
@@ -405,6 +382,7 @@ void * GstInterface::CreatePipeline(gpointer data)
   }
   g_mutex_unlock(&gst->haveDataCondMutex);
 
+  gst->BuildPipeline();
   g_thread_exit(gst->_mCreatePipelineThread);
   return nullptr;
 }
@@ -414,7 +392,7 @@ void * GstInterface::PlayStream(gpointer data)
 {
   GstInterface * gstImpl = (GstInterface *)data;
   std::cout << "PlayStream callback called." << std::endl;
-  
+
   std::cout << "GStreamer(PlayStream): Pipeline Change State Playing" << std::endl;
 
   gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);

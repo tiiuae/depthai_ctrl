@@ -270,14 +270,23 @@ static void * CreatePipeline(gpointer data);
         gst_message_parse_progress(message, &progressType, &code, &text);
         switch (progressType) {
           case GST_PROGRESS_TYPE_START:
+            g_print("Progress: (%s) %s (Start)\n", code, text);
+            break;
           case GST_PROGRESS_TYPE_CONTINUE:
+            g_print("Progress: (%s) %s (Continue)\n", code, text);
+            break;
           case GST_PROGRESS_TYPE_COMPLETE:
+            g_print("Progress: (%s) %s (Complete)\n", code, text);
+            break;
           case GST_PROGRESS_TYPE_CANCELED:
+            g_print("Progress: (%s) %s (Canceled)\n", code, text);
+            break;
           case GST_PROGRESS_TYPE_ERROR:
+            g_print("Progress: (%s) %s (Error)\n", code, text);
+            break;
           default:
             break;
         }
-        g_print("Progress: (%s) %s\n", code, text);
         g_free(code);
         g_free(text);
         break;
@@ -448,6 +457,8 @@ private:
   bool _isStreamPlaying = false;
   //! @brief is stream default private boolean
   bool _isStreamDefault = false;
+  //! @brief is stream shutdown started flag
+  bool _isStreamShutdown = false;
   //! @brief The main gst loop context
   GMainContext * _mLoopContext;
   //! @brief Pipeline creating thread, only ran once

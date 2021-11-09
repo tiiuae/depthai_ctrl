@@ -39,9 +39,9 @@ DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions & options)
 DepthAIGStreamer::~DepthAIGStreamer()
 {
   RCLCPP_INFO(get_logger(), "DepthAI GStreamer: stop stream called");
-  _impl->StopStream();
-  //RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Destroying called");
-  //delete _impl;
+  //_impl->StopStream();
+  RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Destroying called");
+  delete _impl;
 }
 
 //bool DepthAIGStreamer::isStreamPlaying() {return _impl->isStreamPlaying;}
@@ -111,7 +111,7 @@ void DepthAIGStreamer::Initialize()
 
   if (get_parameter("start_stream_on_boot").as_bool()) {
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer: start video stream on boot");
-    _impl->BuildPipeline();
+    _impl->StartStream();
   }
 
 }
@@ -124,13 +124,13 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
     "RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec));
   
     g_mutex_lock(&_impl->haveDataCondMutex);
-  _impl->queueMutex.lock();
+  //_impl->queueMutex.lock();
   _impl->queue.push(video_msg);
   // When message queue is too big - delete old messages
   if (_impl->queue.size() > 1000) {
     _impl->queue.pop();
   }
-  _impl->queueMutex.unlock();
+  //_impl->queueMutex.unlock();
     g_cond_signal(&_impl->haveDataCond);
     g_mutex_unlock(&_impl->haveDataCondMutex);
   /*if (!_impl->IsStreamPlaying()) {
