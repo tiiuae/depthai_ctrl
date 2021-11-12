@@ -60,6 +60,10 @@ void DepthAIGStreamer::Initialize()
     rclcpp::SystemDefaultsQoS(),
     std::bind(&DepthAIGStreamer::VideoStreamCommand, this, std::placeholders::_1));
 
+  _handle_stream_status_timer = this->create_wall_timer(
+    std::chrono::milliseconds(10000),
+    std::bind(&DepthAIGStreamer::HandleStreamStatus, this)); // 10 sec
+
   declare_parameter<int>("width", 1280);
   declare_parameter<int>("height", 720);
   declare_parameter<int>("fps", 25);
@@ -106,9 +110,16 @@ void DepthAIGStreamer::Initialize()
   RCLCPP_INFO(
     get_logger(), "Streaming %s to address: %s",
     _impl->GetEncoderProfile().c_str(), _impl->GetStreamAddress().c_str());
-
+  _is_stop_requested = !get_parameter("start_stream_on_boot").as_bool();
   if (get_parameter("start_stream_on_boot").as_bool()) {
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer: start video stream on boot");
+    
+    RCLCPP_INFO(this->get_logger(), "Resetting timer.");
+    _handle_stream_status_timer->reset();
+    g_mutex_lock(&_impl->haveDataCondMutex);
+    RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
+    std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
+    g_mutex_unlock(&_impl->haveDataCondMutex);
     _impl->StartStream();
   }
 
@@ -117,18 +128,45 @@ void DepthAIGStreamer::Initialize()
 void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
   const auto stamp = video_msg->header.stamp;
+  
   RCLCPP_DEBUG(
     get_logger(),
-    "RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec));
+    "[GST %s]RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec),
+    _impl->IsStreamPlaying() ? "STREAMING" : "STOPPED");
   
     g_mutex_lock(&_impl->haveDataCondMutex);
   _impl->queue.push(video_msg);
   // When message queue is too big - delete old messages
-  if (_impl->queue.size() > 100) {
+  if (_impl->queue.size() > 200) {
     _impl->queue.pop();
   }
     g_cond_signal(&_impl->haveDataCond);
     g_mutex_unlock(&_impl->haveDataCondMutex);
+}
+
+
+void DepthAIGStreamer::HandleStreamStatus()
+{
+  if (!_is_stop_requested) {
+    if (!_impl->IsStreamPlaying()) {
+      if (!_impl->IsStreamStarting()){
+      RCLCPP_INFO(get_logger(), "DepthAI GStreamer: try to start video stream");
+      
+      g_mutex_lock(&_impl->haveDataCondMutex);
+      RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
+      std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
+      g_mutex_unlock(&_impl->haveDataCondMutex);
+      _impl->StartStream();
+      } else {
+        RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Start failed, stop stream");
+      _impl->StopStream();
+      }
+    } else if (_impl->IsStreamPlaying()){
+        RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Stream running okay.");
+    }
+  } else {
+    RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Waiting for start command.");
+  }
 }
 
 void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg)
@@ -162,6 +200,14 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
         }
 
         RCLCPP_INFO(this->get_logger(), "Start video streaming.");
+        _is_stop_requested = false;
+        RCLCPP_INFO(this->get_logger(), "Resetting timer.");
+        _handle_stream_status_timer->reset();
+        RCLCPP_INFO(this->get_logger(), "Resetted timer.");
+        g_mutex_lock(&_impl->haveDataCondMutex);
+        RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
+        std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
+        g_mutex_unlock(&_impl->haveDataCondMutex);
         _impl->StartStream();
         return;
       }
@@ -169,7 +215,13 @@ void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr
     } else if (command == "stop") {
       if (_impl->IsStreamPlaying()) {
         RCLCPP_INFO(this->get_logger(), "Stop video streaming.");
+        _is_stop_requested = true;
+        RCLCPP_INFO(this->get_logger(), "Resetting timer.");
+        _handle_stream_status_timer->reset();
+        RCLCPP_INFO(this->get_logger(), "Resetted timer.");
         _impl->StopStream();
+
+
       } else {
         RCLCPP_INFO(this->get_logger(), "Video stream already stopped.");
       }

@@ -191,6 +191,11 @@ public:
   //!
   bool IsStreamDefault() {return _isStreamDefault;}
 
+  //! @brief Return is stream starting private boolean.
+  //! @return true if stream starting command given, false otherwise.
+  //!
+  bool IsStreamStarting() {return _isStreamStarting;}
+
   //! @brief Incoming message queue, shared with ROS2 node.
   std::queue<CompressedImageMsg::SharedPtr> queue {};
   //! @brief Mutex for the incoming message queue. (Not used)
@@ -207,11 +212,17 @@ public:
 
 protected:
   //! @brief GThreadFunc for gstreamer main loop
-  //! @param[in] data - GstInterface object
+  //! @param[in] data - GstInterface object pointer
   //! @return void
   //!
   static void * PlayStream(gpointer data);
-
+/*
+  //! @brief GThreadFunc for restarting stream
+  //! @param[in] data - GstInterface object pointer
+  //! @return void
+  //!
+  static void * RestartStream(gpointer data);
+*/
   //! @brief Create pipeline for the stream
   //! This function is called from StartStream function in a g_thread
   //! It waits two seconds for the data to be received from the ROS2 node
@@ -222,7 +233,7 @@ protected:
   static void * CreatePipeline(gpointer data);
 
   //! @brief Missing plugin message, used by StreamEventCallback
-  //! @param[in] msg - GstMessage object
+  //! @param[in] msg - GstMessage object pointer
   //! @return true if plugin is missing
   //!
   static gboolean gst_is_missing_plugin_message(GstMessage * msg)
@@ -365,13 +376,16 @@ protected:
       case GST_MESSAGE_ERROR:
         gchar * errDebug;
         GError * error;
-        GSource * source;
+        //GSource * source;
 
         gst_message_parse_error(message, &error, &errDebug);
         g_printerr(
           "ERROR from element %s: %s\n",
           GST_OBJECT_NAME(message->src), error->message);
         g_printerr("Debugging info: %s\n", (errDebug) ? errDebug : "none");
+        depthAIGst->_isStreamPlaying = false;
+        
+        /*
         if (error->code == G_FILE_ERROR_NODEV &&
           g_strrstr(error->message, "Could not open resource for reading and writing"))
         {
@@ -398,7 +412,7 @@ protected:
             GstInterface::StreamPlayingRestartDone);
           g_source_attach(source, depthAIGst->_mLoopContext);
           g_source_unref(source);
-        }
+        }*/
         g_error_free(error);
         g_free(errDebug);
         break;
@@ -418,7 +432,7 @@ protected:
   //! @return void
   //!
   static void NeedDataCallBack(GstElement * appsrc, guint unused_size, gpointer user_data);
-
+/*
   //! @brief Restart stream callback invoked by the timeout source.
   //! @param[in] data GstInterface object
   //! @return false
@@ -428,7 +442,7 @@ protected:
   //! @brief Restart stream done callback invoked by the timeout source.
   //!
   static void StreamPlayingRestartDone(gpointer user_data);
-
+*/
 private:
   //! @brief The gst pipeline element
   GstElement * _pipeline {};
@@ -442,7 +456,10 @@ private:
   guint _needDataSignalId;
   //! @brief stamp of the first frame received from the camera
   GstClockTime _stamp0 {};
-  //! @brief is stream playing private boolean
+  //! @brief Turned on when the start command is being processing.
+  bool _isStreamStarting = false;
+  //! @brief Raised by the gst bus listener when rtspbin's state is playing
+  //! If gst pipeline returns an error, it will be set to false.
   bool _isStreamPlaying = false;
   //! @brief is stream default private boolean
   bool _isStreamDefault = false;
@@ -454,6 +471,8 @@ private:
   GThread * _mCreatePipelineThread;
   //! @brief The main gst loop thread
   GThread * _mLoopThread;
+  //! @brief The stop and start stream thread
+  GThread * _mRestartThread;
   //! @brief the main gst loop
   GMainLoop * _mLoop;
   //! @brief encoder profile for the pipeline

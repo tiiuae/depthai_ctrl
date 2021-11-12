@@ -30,9 +30,12 @@ class DepthAIGStreamer : public rclcpp::Node
     GstInterface *_impl;
     rclcpp::Subscription<CompressedImageMsg>::SharedPtr _video_subscriber;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
-
+    rclcpp::TimerBase::SharedPtr _handle_stream_status_timer;
+    bool _is_stop_requested;
+    
     void Initialize();
     void GrabVideoMsg(CompressedImageMsg::SharedPtr video_msg);
+    void HandleStreamStatus();
     void VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg);
 
 };
