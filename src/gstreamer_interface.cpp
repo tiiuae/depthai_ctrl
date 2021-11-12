@@ -408,6 +408,7 @@ void * GstInterface::PlayStream(gpointer data)
   return nullptr;
 }
 
+/*
 void * GstInterface::RestartStream(gpointer data)
 {
   GstInterface * gstImpl = (GstInterface *)data;
@@ -421,7 +422,6 @@ void * GstInterface::RestartStream(gpointer data)
   g_thread_exit(gstImpl->_mRestartThread);
   return nullptr;
 }
-
 gboolean GstInterface::StreamPlayingRestartCallback(gpointer user_data)
 {
   GstInterface * gstImpl = (GstInterface *)user_data;
@@ -441,5 +441,5 @@ gboolean GstInterface::StreamPlayingRestartCallback(gpointer user_data)
 void GstInterface::StreamPlayingRestartDone(gpointer user_data)
 {
   (void)user_data;
-}
+}*/
 } //namespace depthai_ctrl

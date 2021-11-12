@@ -216,13 +216,13 @@ protected:
   //! @return void
   //!
   static void * PlayStream(gpointer data);
-
+/*
   //! @brief GThreadFunc for restarting stream
   //! @param[in] data - GstInterface object pointer
   //! @return void
   //!
   static void * RestartStream(gpointer data);
-
+*/
   //! @brief Create pipeline for the stream
   //! This function is called from StartStream function in a g_thread
   //! It waits two seconds for the data to be received from the ROS2 node
@@ -376,7 +376,7 @@ protected:
       case GST_MESSAGE_ERROR:
         gchar * errDebug;
         GError * error;
-        GSource * source;
+        //GSource * source;
 
         gst_message_parse_error(message, &error, &errDebug);
         g_printerr(
@@ -432,7 +432,7 @@ protected:
   //! @return void
   //!
   static void NeedDataCallBack(GstElement * appsrc, guint unused_size, gpointer user_data);
-
+/*
   //! @brief Restart stream callback invoked by the timeout source.
   //! @param[in] data GstInterface object
   //! @return false
@@ -442,7 +442,7 @@ protected:
   //! @brief Restart stream done callback invoked by the timeout source.
   //!
   static void StreamPlayingRestartDone(gpointer user_data);
-
+*/
 private:
   //! @brief The gst pipeline element
   GstElement * _pipeline {};
