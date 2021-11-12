@@ -12,7 +12,7 @@ GstInterface::GstInterface(int argc, char * argv[])
   _udpSink(nullptr), _queue1(nullptr), _testSrc(nullptr), _textOverlay(nullptr),
   _h26xEnc(nullptr), _testSrcFilter(nullptr), _h26xEncFilter(nullptr),
   _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr),
-  _isStreamShutdown(false)
+  _isStreamShutdown(false), _isStreamStarting(false)
 {
   _streamAddress = "";
   gst_init(&argc, &argv);
@@ -33,7 +33,9 @@ void GstInterface::StartStream(void)
     return;
   }
   _isStreamShutdown = false;
-  _isStreamPlaying = true;
+  _isStreamStarting = true;
+  
+  //_isStreamPlaying = true; 
 
   std::cout << "Start stream called!" << std::endl;
   _mCreatePipelineThread = g_thread_new(
@@ -46,6 +48,7 @@ void GstInterface::StopStream(void)
   GstFlowReturn ret;
   std::cout << "Sending end-of-stream!" << std::endl;
   _isStreamShutdown = true;
+  _isStreamStarting = false;
   _isStreamPlaying = false;
   std::cout << "Broadcasting the GCond signal to unlock have-data!" << std::endl;
   g_cond_broadcast(&haveDataCond);
@@ -58,7 +61,7 @@ void GstInterface::StopStream(void)
     }
   }
 
-  std::cout << "Disconnecting signal!" << std::endl;
+  std::cout << "Disconnecting signal! Signal ID: "<< _needDataSignalId << std::endl;
   if (_needDataSignalId != 0) {
     g_signal_handler_disconnect(_appSource, _needDataSignalId);
     _needDataSignalId = 0;
@@ -306,10 +309,13 @@ void GstInterface::BuildPipeline()
           _pipeline), _appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
       gst_element_link_many(_appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
     }
+    std::cout << "Connecting need-data signal! Signal ID: "<< _needDataSignalId << std::endl;
+  
     _needDataSignalId =
       g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
     //GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_camera");
-
+    std::cout << "Need-data signal connected! Signal ID: "<< _needDataSignalId << std::endl;
+  
   }
 
   _bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
@@ -332,7 +338,7 @@ void GstInterface::NeedDataCallBack(
   if (!data->_isStreamDefault) {
     g_mutex_lock(&data->haveDataCondMutex);
     while (data->queue.empty() and !data->_isStreamShutdown) {
-      //std::cout << "Queue is empty!" << std::endl;
+      // std::cout << "Queue is empty!" << std::endl;
       g_cond_wait(&data->haveDataCond, &data->haveDataCondMutex);
     }
     std::shared_ptr<sensor_msgs::msg::CompressedImage> videoPtr;
@@ -342,7 +348,7 @@ void GstInterface::NeedDataCallBack(
       g_mutex_unlock(&data->haveDataCondMutex);
       return;
     } else {
-      //std::cout << "Processing data!" << std::endl;
+      // std::cout << "Processing data! Queue size: " << data->queue.size() << std::endl;
       videoPtr = data->queue.front();
       data->queue.pop();
       g_mutex_unlock(&data->haveDataCondMutex);
@@ -396,9 +402,23 @@ void * GstInterface::PlayStream(gpointer data)
   std::cout << "GStreamer(PlayStream): Pipeline Change State Playing" << std::endl;
 
   gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);
-  gstImpl->_isStreamPlaying = true;
+  //gstImpl->_isStreamPlaying = true;
   g_main_loop_run(gstImpl->_mLoop);
   g_thread_exit(gstImpl->_mLoopThread);
+  return nullptr;
+}
+
+void * GstInterface::RestartStream(gpointer data)
+{
+  GstInterface * gstImpl = (GstInterface *)data;
+  std::cout << "Restart Stream thread created." << std::endl;
+
+  std::cout << "GStreamer(RestartStream): Will call StopStream, and Start Stream after 10sec" << std::endl;
+
+  //gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);
+  //gstImpl->_isStreamPlaying = true;
+  //g_main_loop_run(gstImpl->_mLoop);
+  g_thread_exit(gstImpl->_mRestartThread);
   return nullptr;
 }
 
