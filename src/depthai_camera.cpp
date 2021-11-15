@@ -54,6 +54,10 @@ void DepthAICamera::Initialize()
   _videoH265 = (get_parameter("encoding").as_string() == "H265");
   _useMonoCams = get_parameter("use_mono_cams").as_bool();
   _useRawColorCam = get_parameter("use_raw_color_cam").as_bool();
+
+  // USB2 can only handle one H264 stream from camera. Adding raw camera or mono cameras will
+  // cause dropped messages and unstable latencies between frames. When using USB3, we can
+  // support multiple streams without any bandwidth issues.
   _useUSB3 = get_parameter("use_usb_three").as_bool();
   _lastFrameTime = get_clock()->now();
 }
@@ -125,6 +129,7 @@ void DepthAICamera::TryRestarting()
 
   _pipeline = std::make_shared<dai::Pipeline>();
 
+  // Using mono cameras adds additional CPU consumption, therefore it is disabled by default
   if (_useMonoCams) {
     auto monoLeft = _pipeline->create<dai::node::MonoCamera>();
     auto monoRight = _pipeline->create<dai::node::MonoCamera>();
@@ -154,6 +159,7 @@ void DepthAICamera::TryRestarting()
   colorCamera->setVideoSize(_videoWidth, _videoHeight);
   colorCamera->setFps(_videoFps);
 
+  // Like mono cameras, color camera is disabled by default to reduce computational load.
   if (_useRawColorCam) {
     auto xoutColor = _pipeline->create<dai::node::XLinkOut>();
     xoutColor->setStreamName("color");
@@ -171,7 +177,6 @@ void DepthAICamera::TryRestarting()
   videoEncoder->bitstream.link(xoutVideo->input);
   auto xinColor = _pipeline->create<dai::node::XLinkIn>();
   xinColor->setStreamName("colorCamCtrl");
-
 
   xinColor->out.link(colorCamera->inputControl);
   RCLCPP_INFO(this->get_logger(), "[%s]: Initializing DepthAI camera...", get_name());
@@ -212,7 +217,7 @@ void DepthAICamera::TryRestarting()
     this->get_logger(), "[%s]: DepthAI Camera USB Speed: %s", get_name(),
     usbSpeed.c_str());
 
-  _device->startPipeline();
+  //_device->startPipeline();
   _colorCamInputQueue = _device->getInputQueue("colorCamCtrl");
   dai::CameraControl colorCamCtrl;
   colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::CONTINUOUS_VIDEO);
@@ -221,42 +226,42 @@ void DepthAICamera::TryRestarting()
 
   if (_useRawColorCam) {
     _colorQueue = _device->getOutputQueue("color", 30, false);
-    auto _colorCamCallback =
+    _colorCamCallback =
       _colorQueue->addCallback(
       std::bind(
         &DepthAICamera::onColorCamCallback, this,
-        std::placeholders::_1, std::placeholders::_2));
+        std::placeholders::_1));
   }
   _videoQueue = _device->getOutputQueue("enc26xColor", 30, true);
   if (_useMonoCams) {
     _leftQueue = _device->getOutputQueue("left", 30, false);
     _rightQueue = _device->getOutputQueue("right", 30, false);
 
-    auto _leftCamCallback =
+    _leftCamCallback =
       _leftQueue->addCallback(
       std::bind(
         &DepthAICamera::onLeftCamCallback, this,
-        std::placeholders::_1, std::placeholders::_2));
-    auto _rightCamCallback =
+        std::placeholders::_1));
+    _rightCamCallback =
       _rightQueue->addCallback(
       std::bind(
         &DepthAICamera::onRightCallback, this,
-        std::placeholders::_1, std::placeholders::_2));
+        std::placeholders::_1));
   }
   _thread_running = true;
 
-  auto _videoEncoderCallback =
+  _videoEncoderCallback =
     _videoQueue->addCallback(
     std::bind(
       &DepthAICamera::onVideoEncoderCallback, this,
-      std::placeholders::_1, std::placeholders::_2));
+      std::placeholders::_1));
 
 }
 
 void DepthAICamera::onLeftCamCallback(
-  const std::string & stream_name,
   const std::shared_ptr<dai::ADatatype> data)
 {
+  (void)data; // Using this pointer does not pop from queue, so we don't need to do anything with it.
   std::vector<std::shared_ptr<dai::ImgFrame>> leftPtrVector =
     _leftQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
@@ -270,9 +275,9 @@ void DepthAICamera::onLeftCamCallback(
 }
 
 void DepthAICamera::onRightCallback(
-  const std::string & stream_name,
   const std::shared_ptr<dai::ADatatype> data)
 {
+  (void)data;
   std::vector<std::shared_ptr<dai::ImgFrame>> rightPtrVector =
     _rightQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
@@ -285,9 +290,9 @@ void DepthAICamera::onRightCallback(
 }
 
 void DepthAICamera::onColorCamCallback(
-  const std::string & stream_name,
   const std::shared_ptr<dai::ADatatype> data)
 {
+  (void)data;
   std::vector<std::shared_ptr<dai::ImgFrame>> colorPtrVector =
     _colorQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
@@ -301,34 +306,43 @@ void DepthAICamera::onColorCamCallback(
 
 
 void DepthAICamera::onVideoEncoderCallback(
-  const std::string & stream_name,
   const std::shared_ptr<dai::ADatatype> data)
 {
-
+  (void)data;
   std::vector<std::shared_ptr<dai::ImgFrame>> videoPtrVector =
     _videoQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
     this->get_logger(), "[%s]: Received %d video frames...",
     get_name(), videoPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & videoPtr : videoPtrVector) {
-    const auto stamp = videoPtr->getTimestamp();
-    const int32_t sec = duration_cast<seconds>(stamp.time_since_epoch()).count();
-    const int32_t nsec = duration_cast<nanoseconds>(stamp.time_since_epoch()).count() %
-      1000000000UL;
+    
+    /*
+      Old implementation uses getTimestamp, which had a bug where the time is not correct when run at boot.
+      getTimestamp is host syncronized and supposed to give the time in host clock.
+      However, since the DepthAI camera is starting its boot at the same time as the host,
+      The syncronization is not working properly as it tries to syncronize the camera clock with the host.
+      Therefore, we use the getTimestampDevice() to get direct device time.
+      This implementation will work without any problems for the H264 video streaming.
+      However, a host syncronized time is needed for the raw color camera, when doing camera based navigation.
+      Otherwise, the time drifts will cause wrong estimations and tracking will be unstable. 
+
+      It is also possible to use SequenceNumber for timestamp calculation, and it also works for H264 streaming.
+      However, it might still be problematic with the raw color camera. It will be investigated later.
+    */
+    //const auto stamp = videoPtr->getTimestamp().time_since_epoch().count();
+    const auto stamp = videoPtr->getTimestampDevice().time_since_epoch().count();
+    //const auto seq = videoPtr->getSequenceNum();
+    //int64_t stamp = (int64_t)seq * (1e9/_videoFps); // Use sequence number for timestamp
+
     CompressedImageMsg video_stream_chunk{};
     video_stream_chunk.header.frame_id = _color_camera_frame;
-    video_stream_chunk.header.stamp = rclcpp::Time(sec, nsec, RCL_STEADY_TIME);
 
+    // rclcpp::Time can be initialized directly with nanoseconds only.
+    // Internally, when given with seconds and nanoseconds, it casts it to nanoseconds anyways.
+    video_stream_chunk.header.stamp = rclcpp::Time(stamp, RCL_STEADY_TIME);
     video_stream_chunk.data.swap(videoPtr->getData());
     video_stream_chunk.format = _videoH265 ? "H265" : "H264";
     _video_publisher->publish(video_stream_chunk);
-
-    RCLCPP_DEBUG(
-      this->get_logger(), "[%s]: Since last frame %d - Frame timestamp %ld", get_name(),
-      (this->get_clock()->now() - _lastFrameTime).nanoseconds(),
-      stamp.time_since_epoch().count() - _lastFrameTimePoint);
-    _lastFrameTime = this->get_clock()->now();
-    _lastFrameTimePoint = stamp.time_since_epoch().count();
   }
 }
 
