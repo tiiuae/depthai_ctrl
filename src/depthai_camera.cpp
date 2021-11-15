@@ -311,24 +311,29 @@ void DepthAICamera::onVideoEncoderCallback(
     this->get_logger(), "[%s]: Received %d video frames...",
     get_name(), videoPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & videoPtr : videoPtrVector) {
-    const auto stamp = videoPtr->getTimestamp();
-    const int32_t sec = duration_cast<seconds>(stamp.time_since_epoch()).count();
-    const int32_t nsec = duration_cast<nanoseconds>(stamp.time_since_epoch()).count() %
-      1000000000UL;
+    //const auto stamp = videoPtr->getTimestamp();
+    const auto stamp = videoPtr->getTimestampDevice().time_since_epoch().count();
+    //const auto seq = videoPtr->getSequenceNum();
+    //int64_t stamp = (int64_t)seq * (1e9/_videoFps); // Use sequence number for timestamp
     CompressedImageMsg video_stream_chunk{};
     video_stream_chunk.header.frame_id = _color_camera_frame;
-    video_stream_chunk.header.stamp = rclcpp::Time(sec, nsec, RCL_STEADY_TIME);
+    video_stream_chunk.header.stamp = rclcpp::Time(stamp, RCL_STEADY_TIME);
 
     video_stream_chunk.data.swap(videoPtr->getData());
+    
+    //RCLCPP_INFO(
+    //  this->get_logger(), "[%s]:[Seq:%04ld]-Received chunk Timestamp: %ld Publishing video frame at %d.%09d",
+    //  get_name(), videoPtr->getSequenceNum(), stamp, video_stream_chunk.header.stamp.sec, video_stream_chunk.header.stamp.nanosec);
+
     video_stream_chunk.format = _videoH265 ? "H265" : "H264";
     _video_publisher->publish(video_stream_chunk);
 
-    RCLCPP_DEBUG(
+    /*RCLCPP_DEBUG(
       this->get_logger(), "[%s]: Since last frame %d - Frame timestamp %ld", get_name(),
       (this->get_clock()->now() - _lastFrameTime).nanoseconds(),
       stamp.time_since_epoch().count() - _lastFrameTimePoint);
     _lastFrameTime = this->get_clock()->now();
-    _lastFrameTimePoint = stamp.time_since_epoch().count();
+    _lastFrameTimePoint = stamp.time_since_epoch().count();*/
   }
 }
 

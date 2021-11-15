@@ -12,14 +12,13 @@ GstInterface::GstInterface(int argc, char * argv[])
   _udpSink(nullptr), _queue1(nullptr), _testSrc(nullptr), _textOverlay(nullptr),
   _h26xEnc(nullptr), _testSrcFilter(nullptr), _h26xEncFilter(nullptr),
   _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr),
-  _isStreamShutdown(false), _isStreamStarting(false)
+  _isStreamShutdown(false), _isStreamStarting(false), _gstStartTimestamp(0),
+  _gstTimestamp(0)
 {
   _streamAddress = "";
   gst_init(&argc, &argv);
   g_mutex_init(&haveDataCondMutex);
   g_mutex_init(&startStreamingCondMutex);
-  _mLoopContext = g_main_context_default();
-  _mLoop = g_main_loop_new(_mLoopContext, false);
 }
 
 GstInterface::~GstInterface()
@@ -34,9 +33,11 @@ void GstInterface::StartStream(void)
   }
   _isStreamShutdown = false;
   _isStreamStarting = true;
-  
+  _gstTimestamp = 0;
   //_isStreamPlaying = true; 
 
+  _mLoopContext = g_main_context_default();
+  _mLoop = g_main_loop_new(_mLoopContext, false);
   std::cout << "Start stream called!" << std::endl;
   _mCreatePipelineThread = g_thread_new(
     "GstThreadCreatePipeline",
@@ -46,12 +47,12 @@ void GstInterface::StartStream(void)
 void GstInterface::StopStream(void)
 {
   GstFlowReturn ret;
-  std::cout << "Sending end-of-stream!" << std::endl;
   _isStreamShutdown = true;
   _isStreamStarting = false;
   _isStreamPlaying = false;
   std::cout << "Broadcasting the GCond signal to unlock have-data!" << std::endl;
   g_cond_broadcast(&haveDataCond);
+  std::cout << "Sending end-of-stream!" << std::endl;
   if (_appSource != nullptr) {
     g_signal_emit_by_name(_appSource, "end-of-stream", &ret);
     if (ret != GST_FLOW_OK) {
@@ -66,18 +67,18 @@ void GstInterface::StopStream(void)
     g_signal_handler_disconnect(_appSource, _needDataSignalId);
     _needDataSignalId = 0;
   }
-  std::cout << "Unreferencing bus element!" << std::endl;
-  if (_bus) {
-    gst_bus_remove_watch(_bus);
-    gst_object_unref(_bus);
-    _bus = nullptr;
-  }
   if (_pipeline != nullptr) {
     std::cout << "Setting pipeline state to NULL!" << std::endl;
     gst_element_set_state(_pipeline, GST_STATE_NULL);
     std::cout << "Unreferencing pipeline element!" << std::endl;
     gst_object_unref(GST_OBJECT(_pipeline));
     _pipeline = nullptr;
+  }
+  std::cout << "Unreferencing bus element!" << std::endl;
+  if (_bus != nullptr) {
+    gst_bus_remove_watch(_bus);
+    gst_object_unref(_bus);
+    _bus = nullptr;
   }
   if (_busWatchId != 0) {
     g_source_remove(_busWatchId);
@@ -86,6 +87,7 @@ void GstInterface::StopStream(void)
   std::cout << "Quitting main gst loop!" << std::endl;
   if (_mLoop != nullptr) {
     g_main_loop_quit(_mLoop);
+    _mLoop = nullptr;
   }
   std::cout << "Quitting main loop thread!" << std::endl;
   if (_mLoopThread != nullptr) {
@@ -94,10 +96,10 @@ void GstInterface::StopStream(void)
   }
   if (_mCreatePipelineThread != nullptr) {
     g_thread_join(_mCreatePipelineThread);
-  }
+  }/*
   if (_mLoopContext) {
     g_main_context_unref(_mLoopContext);
-  }
+  }*/
 }
 
 void GstInterface::BuildDefaultPipeline()
@@ -268,6 +270,7 @@ void GstInterface::BuildPipeline()
         G_OBJECT(_rtspSink),
         "protocols", 4,             // 4 = tcp
         "tls-validation-flags", 0,
+        //"tcp-timeout", 15000000,
         "location", _streamAddress.c_str(),
         NULL);
     }
@@ -317,12 +320,14 @@ void GstInterface::BuildPipeline()
     std::cout << "Need-data signal connected! Signal ID: "<< _needDataSignalId << std::endl;
   
   }
-
+  std::cout << "Getting bus element..." << std::endl;
   _bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
+  std::cout << "Getting bus element done. Adding bus watch..." << std::endl;
   _busWatchId = gst_bus_add_watch(_bus, GstInterface::StreamEventCallBack, this);
+  std::cout << "Bus watch added. Unreferencing bus..." << std::endl;
   gst_object_unref(_bus);
   _bus = nullptr;
-
+  std::cout << "Bus unreferenced. Pipeline created. Calling PlayStream.." << std::endl;
   _mLoopThread = g_thread_new("GstThread", (GThreadFunc)GstInterface::PlayStream, this);
 
 
@@ -358,14 +363,19 @@ void GstInterface::NeedDataCallBack(
     GstBuffer * buffer = gst_buffer_new_and_alloc(frame.size());
     gst_buffer_fill(buffer, 0, &frame[0], frame.size());
     const auto stamp = videoPtr->header.stamp;
-    const GstClockTime gst_stamp = stamp.sec * 1000000000UL + stamp.nanosec;
-
-    if (data->_stamp0 == 0) {
-      data->_stamp0 = gst_stamp;
+    const GstClockTime stampTime = stamp.sec * 1000000000UL + stamp.nanosec;
+     
+    if (data->_gstStartTimestamp == 0) {
+      data->_gstStartTimestamp = data->_gstTimestamp;
     }
 
-    const GstClockTime local_stamp = gst_stamp - data->_stamp0;
-    GST_BUFFER_PTS(buffer) = local_stamp;
+    const GstClockTime fromStart = stampTime - data->_gstStartTimestamp;
+    const auto timeDifference = fromStart - data->_gstTimestamp;
+    data->_gstTimestamp = fromStart;
+    
+    //const GstClockTime local_stamp = data->_gstTimestamp - data->_gstStartTimestamp;
+    GST_BUFFER_PTS(buffer) = (gint64)fromStart;
+    GST_BUFFER_DURATION(buffer) = (gint64)timeDifference;
 
     g_signal_emit_by_name(appsrc, "push-buffer", buffer, &result);
     gst_buffer_unref(buffer);
@@ -399,11 +409,14 @@ void * GstInterface::PlayStream(gpointer data)
   GstInterface * gstImpl = (GstInterface *)data;
   std::cout << "PlayStream callback called." << std::endl;
 
-  std::cout << "GStreamer(PlayStream): Pipeline Change State Playing" << std::endl;
+  std::cout << "GStreamer(PlayStream): Pipeline state changing to Playing" << std::endl;
 
   gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);
+  std::cout << "GStreamer(PlayStream): Pipeline state changed to Playing" << std::endl;
+
   //gstImpl->_isStreamPlaying = true;
   g_main_loop_run(gstImpl->_mLoop);
+  std::cout << "GStreamer(PlayStream): Main loop exited." << std::endl;
   g_thread_exit(gstImpl->_mLoopThread);
   return nullptr;
 }

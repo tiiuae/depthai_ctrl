@@ -491,6 +491,8 @@ private:
   GstElement * _udpSink;
   GstElement * _queue1;
   GstElement * _rtspSink;
+  GstClockTime _gstStartTimestamp;
+  GstClockTime _gstTimestamp;
   int _encoderWidth;
   int _encoderHeight;
   int _encoderFps;

@@ -128,11 +128,12 @@ void DepthAIGStreamer::Initialize()
 void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_msg)
 {
   const auto stamp = video_msg->header.stamp;
+  const long long stampTime = stamp.sec * 1000000000UL + stamp.nanosec;
   
   RCLCPP_DEBUG(
     get_logger(),
-    "[GST %s]RECEIVED CHUNK #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec),
-    _impl->IsStreamPlaying() ? "STREAMING" : "STOPPED");
+    "[GST %s]RECEIVED CHUNK Timestamp: %ld #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec),
+    _impl->IsStreamPlaying() ? "STREAMING" : "STOPPED",stampTime);
   
     g_mutex_lock(&_impl->haveDataCondMutex);
   _impl->queue.push(video_msg);
