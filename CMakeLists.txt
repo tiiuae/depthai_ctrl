@@ -72,13 +72,13 @@ ament_target_dependencies(gstreamer_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
 
 # Combined DepthAI node
-add_executable(multi_node src/multi_node.cpp)
-ament_target_dependencies(multi_node PUBLIC rclcpp rclcpp_components)
-target_link_libraries(multi_node PUBLIC depthai_camera depthai_gstreamer)
+add_executable(depthai_ctrl src/depthai_ctrl.cpp)
+ament_target_dependencies(depthai_ctrl PUBLIC rclcpp rclcpp_components)
+target_link_libraries(depthai_ctrl PUBLIC depthai_camera depthai_gstreamer)
 
 # Explicitly force to re-compile binary whenever library changed
 add_dependencies(camera_node depthai_camera)
-add_dependencies(multi_node depthai_gstreamer depthai_camera)
+add_dependencies(depthai_ctrl depthai_gstreamer depthai_camera)
 add_dependencies(gstreamer_node depthai_gstreamer)
 
 rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
@@ -113,7 +113,7 @@ install(TARGETS depthai_camera depthai_gstreamer gstreamer_interface
         RUNTIME DESTINATION bin)
 
 install(TARGETS
-        camera_node gstreamer_node multi_node
+        camera_node gstreamer_node depthai_ctrl
         DESTINATION lib/${PROJECT_NAME})
 
 

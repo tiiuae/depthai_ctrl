@@ -85,7 +85,7 @@ void DepthAIGStreamer::Initialize()
   start_stream_on_boot_desc.additional_constraints =
     "This parameter has no "
     "effect after node has started.";
-  declare_parameter<bool>("start_stream_on_boot", false, start_stream_on_boot_desc);
+  declare_parameter<bool>("start_stream_on_boot", true, start_stream_on_boot_desc);
 
   rcl_interfaces::msg::ParameterDescriptor address_desc;
   address_desc.name = "address";
