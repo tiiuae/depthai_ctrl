@@ -18,7 +18,7 @@
   depthai_gstreamer:
     ros__parameters:
       #address: rtsp://127.0.0.1:8554/performancetest1
-      address: rtsps://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@video-stream.sacplatform.com:8555/performancetest1
+      #address: rtsps://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@video-stream.sacplatform.com:8555/performancetest1
       bitrate: 3000000
       encoding: H264
       fps: 25
