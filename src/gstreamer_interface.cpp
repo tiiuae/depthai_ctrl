@@ -4,16 +4,25 @@
 namespace depthai_ctrl
 {
 GstInterface::GstInterface(int argc, char * argv[])
-: _mLoopContext(nullptr), _mLoopThread(nullptr), _mLoop(nullptr),
-  _pipeline(nullptr), _appSource(nullptr), _encoderProfile("H264"),
-  _busWatchId(0), _bus(nullptr), _needDataSignalId(0),
-  _isStreamPlaying(false), _isStreamDefault(false), _encoderWidth(1280),
-  _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000), _rtspSink(nullptr),
-  _udpSink(nullptr), _queue1(nullptr), _testSrc(nullptr), _textOverlay(nullptr),
-  _h26xEnc(nullptr), _testSrcFilter(nullptr), _h26xEncFilter(nullptr),
-  _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr),
-  _isStreamShutdown(false), _isStreamStarting(false), _gstStartTimestamp(0),
-  _gstTimestamp(0)
+: _pipeline(nullptr), _appSource(nullptr), _busWatchId(0), _bus(nullptr),
+  _needDataSignalId(0), _isStreamStarting(false), _isStreamPlaying(false),
+  _isStreamDefault(false), _isStreamShutdown(false), _mLoopContext(nullptr), 
+  _mLoopThread(nullptr), _mLoop(nullptr), _encoderProfile("H264"),
+  _testSrc(nullptr), _textOverlay(nullptr), _h26xEnc(nullptr), _testSrcFilter(nullptr),
+  _h26xEncFilter(nullptr), _h26xparse(nullptr), _h26xpay(nullptr),_udpSink(nullptr),
+  _queue1(nullptr), _rtspSink(nullptr), _gstStartTimestamp(0), _gstTimestamp(0),
+  _encoderWidth(1280), _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000)
+
+//: _mLoopContext(nullptr), _mLoopThread(nullptr), _pipeline(nullptr),
+//  _mLoop(nullptr), _appSource(nullptr), _encoderProfile("H264"),
+//  _busWatchId(0), _bus(nullptr), _needDataSignalId(0),
+//  _isStreamPlaying(false), _isStreamDefault(false), _encoderWidth(1280),
+//  _encoderHeight(720), _encoderFps(25), _encoderBitrate(3000000), _rtspSink(nullptr),
+//  _udpSink(nullptr), _queue1(nullptr), _testSrc(nullptr), _textOverlay(nullptr),
+//  _h26xEnc(nullptr), _testSrcFilter(nullptr), _h26xEncFilter(nullptr),
+//  _h26xparse(nullptr), _h26xpay(nullptr), _mCreatePipelineThread(nullptr),
+//  _isStreamShutdown(false), _isStreamStarting(false), _gstStartTimestamp(0),
+//  _gstTimestamp(0)
 {
   _streamAddress = "";
   gst_init(&argc, &argv);
@@ -333,6 +342,7 @@ void GstInterface::NeedDataCallBack(
   GstElement * appsrc, guint unused_size,
   gpointer user_data)
 {
+  (void)unused_size;
   GstInterface * data = (GstInterface *)user_data;
   GstFlowReturn result;
   if (!data->_isStreamDefault) {

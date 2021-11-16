@@ -403,8 +403,6 @@ private:
   GstBus * _bus;
   //! @brief need-data signal id, connected to appsrc
   guint _needDataSignalId;
-  //! @brief stamp of the first frame received from the camera
-  GstClockTime _stamp0 {};
   //! @brief Turned on when the start command is being processing.
   bool _isStreamStarting = false;
   //! @brief Raised by the gst bus listener when rtspbin's state is playing

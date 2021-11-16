@@ -217,7 +217,7 @@ void DepthAICamera::TryRestarting()
     this->get_logger(), "[%s]: DepthAI Camera USB Speed: %s", get_name(),
     usbSpeed.c_str());
 
-  _device->startPipeline();
+  //_device->startPipeline();
   _colorCamInputQueue = _device->getInputQueue("colorCamCtrl");
   dai::CameraControl colorCamCtrl;
   colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::CONTINUOUS_VIDEO);
@@ -226,42 +226,42 @@ void DepthAICamera::TryRestarting()
 
   if (_useRawColorCam) {
     _colorQueue = _device->getOutputQueue("color", 30, false);
-    auto _colorCamCallback =
+    _colorCamCallback =
       _colorQueue->addCallback(
       std::bind(
         &DepthAICamera::onColorCamCallback, this,
-        std::placeholders::_1, std::placeholders::_2));
+        std::placeholders::_1));
   }
   _videoQueue = _device->getOutputQueue("enc26xColor", 30, true);
   if (_useMonoCams) {
     _leftQueue = _device->getOutputQueue("left", 30, false);
     _rightQueue = _device->getOutputQueue("right", 30, false);
 
-    auto _leftCamCallback =
+    _leftCamCallback =
       _leftQueue->addCallback(
       std::bind(
         &DepthAICamera::onLeftCamCallback, this,
-        std::placeholders::_1, std::placeholders::_2));
-    auto _rightCamCallback =
+        std::placeholders::_1));
+    _rightCamCallback =
       _rightQueue->addCallback(
       std::bind(
         &DepthAICamera::onRightCallback, this,
-        std::placeholders::_1, std::placeholders::_2));
+        std::placeholders::_1));
   }
   _thread_running = true;
 
-  auto _videoEncoderCallback =
+  _videoEncoderCallback =
     _videoQueue->addCallback(
     std::bind(
       &DepthAICamera::onVideoEncoderCallback, this,
-      std::placeholders::_1, std::placeholders::_2));
+      std::placeholders::_1));
 
 }
 
 void DepthAICamera::onLeftCamCallback(
-  const std::string & stream_name,
   const std::shared_ptr<dai::ADatatype> data)
 {
+  (void)data; // Using this pointer does not pop from queue, so we don't need to do anything with it.
   std::vector<std::shared_ptr<dai::ImgFrame>> leftPtrVector =
     _leftQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
@@ -275,9 +275,9 @@ void DepthAICamera::onLeftCamCallback(
 }
 
 void DepthAICamera::onRightCallback(
-  const std::string & stream_name,
   const std::shared_ptr<dai::ADatatype> data)
 {
+  (void)data;
   std::vector<std::shared_ptr<dai::ImgFrame>> rightPtrVector =
     _rightQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
@@ -290,9 +290,9 @@ void DepthAICamera::onRightCallback(
 }
 
 void DepthAICamera::onColorCamCallback(
-  const std::string & stream_name,
   const std::shared_ptr<dai::ADatatype> data)
 {
+  (void)data;
   std::vector<std::shared_ptr<dai::ImgFrame>> colorPtrVector =
     _colorQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
@@ -306,10 +306,9 @@ void DepthAICamera::onColorCamCallback(
 
 
 void DepthAICamera::onVideoEncoderCallback(
-  const std::string & stream_name,
   const std::shared_ptr<dai::ADatatype> data)
 {
-
+  (void)data;
   std::vector<std::shared_ptr<dai::ImgFrame>> videoPtrVector =
     _videoQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
