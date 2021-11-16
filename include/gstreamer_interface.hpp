@@ -198,17 +198,10 @@ public:
 
   //! @brief Incoming message queue, shared with ROS2 node.
   std::queue<CompressedImageMsg::SharedPtr> queue {};
-  //! @brief Mutex for the incoming message queue. (Not used)
-  std::mutex queueMutex {};
 
   //! @brief GCond for queue
   GCond haveDataCond {};
   GMutex haveDataCondMutex {};
-
-  //! @brief Gcond to start stream, however not used.
-  //! It is being managed by haveDataCond
-  GCond startStreamingCond {};
-  GMutex startStreamingCondMutex {};
 
 protected:
   //! @brief GThreadFunc for gstreamer main loop
@@ -216,13 +209,7 @@ protected:
   //! @return void
   //!
   static void * PlayStream(gpointer data);
-/*
-  //! @brief GThreadFunc for restarting stream
-  //! @param[in] data - GstInterface object pointer
-  //! @return void
-  //!
-  static void * RestartStream(gpointer data);
-*/
+  
   //! @brief Create pipeline for the stream
   //! This function is called from StartStream function in a g_thread
   //! It waits two seconds for the data to be received from the ROS2 node
@@ -385,34 +372,6 @@ protected:
         g_printerr("Debugging info: %s\n", (errDebug) ? errDebug : "none");
         depthAIGst->_isStreamPlaying = false;
         
-        /*
-        if (error->code == G_FILE_ERROR_NODEV &&
-          g_strrstr(error->message, "Could not open resource for reading and writing"))
-        {
-          GstFlowReturn ret;
-          if (depthAIGst->_needDataSignalId != 0) {
-            g_signal_handler_disconnect(depthAIGst->_appSource, depthAIGst->_needDataSignalId);
-          }
-          if (depthAIGst->_appSource != nullptr) {
-            g_signal_emit_by_name(depthAIGst->_appSource, "end-of-stream", &ret);
-            if (ret != GST_FLOW_OK) {
-              g_printerr("Error: Emit end-of-stream failed\n");
-            }
-          }
-          if (depthAIGst->_pipeline != nullptr) {
-            gst_element_set_state(depthAIGst->_pipeline, GST_STATE_NULL);
-          }
-          depthAIGst->_isStreamPlaying = false;
-          // Restart stream after two seconds.
-          source = g_timeout_source_new(2000);
-          g_source_set_callback(
-            source,
-            GstInterface::StreamPlayingRestartCallback,
-            depthAIGst,
-            GstInterface::StreamPlayingRestartDone);
-          g_source_attach(source, depthAIGst->_mLoopContext);
-          g_source_unref(source);
-        }*/
         g_error_free(error);
         g_free(errDebug);
         break;
@@ -432,27 +391,17 @@ protected:
   //! @return void
   //!
   static void NeedDataCallBack(GstElement * appsrc, guint unused_size, gpointer user_data);
-/*
-  //! @brief Restart stream callback invoked by the timeout source.
-  //! @param[in] data GstInterface object
-  //! @return false
-  //!
-  static gboolean StreamPlayingRestartCallback(gpointer user_data);
 
-  //! @brief Restart stream done callback invoked by the timeout source.
-  //!
-  static void StreamPlayingRestartDone(gpointer user_data);
-*/
 private:
   //! @brief The gst pipeline element
   GstElement * _pipeline {};
   //! @brief The gst appsource element
   GstElement * _appSource {};
-  //! @brief bus watch id for gst messages
+  //! @brief bus watch id for gst messages, stream event handling
   guint _busWatchId;
-  //! @brief gst bus object
+  //! @brief gst bus object, unref after use
   GstBus * _bus;
-  //! @brief need-data signal id
+  //! @brief need-data signal id, connected to appsrc
   guint _needDataSignalId;
   //! @brief stamp of the first frame received from the camera
   GstClockTime _stamp0 {};
@@ -471,8 +420,6 @@ private:
   GThread * _mCreatePipelineThread;
   //! @brief The main gst loop thread
   GThread * _mLoopThread;
-  //! @brief The stop and start stream thread
-  GThread * _mRestartThread;
   //! @brief the main gst loop
   GMainLoop * _mLoop;
   //! @brief encoder profile for the pipeline
@@ -480,7 +427,7 @@ private:
   //! @brief stream address, either starts with udp:// or rtsps://
   std::string _streamAddress {};
 
-
+  //! @brief The GST pipeline elements for class-wide access
   GstElement * _testSrc;
   GstElement * _textOverlay;
   GstElement * _h26xEnc;
@@ -491,8 +438,12 @@ private:
   GstElement * _udpSink;
   GstElement * _queue1;
   GstElement * _rtspSink;
+  //! @brief The start time is saved for the first frame
+  //! and used to calculate the relative timestamp of the next frame.
   GstClockTime _gstStartTimestamp;
+  //! @brief Last frame's timestamp is recorded, and used for frame duration in buffer
   GstClockTime _gstTimestamp;
+
   int _encoderWidth;
   int _encoderHeight;
   int _encoderFps;

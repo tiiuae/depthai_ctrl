@@ -18,7 +18,6 @@ GstInterface::GstInterface(int argc, char * argv[])
   _streamAddress = "";
   gst_init(&argc, &argv);
   g_mutex_init(&haveDataCondMutex);
-  g_mutex_init(&startStreamingCondMutex);
 }
 
 GstInterface::~GstInterface()
@@ -34,7 +33,6 @@ void GstInterface::StartStream(void)
   _isStreamShutdown = false;
   _isStreamStarting = true;
   _gstTimestamp = 0;
-  //_isStreamPlaying = true; 
 
   _mLoopContext = g_main_context_default();
   _mLoop = g_main_loop_new(_mLoopContext, false);
@@ -42,7 +40,6 @@ void GstInterface::StartStream(void)
   _mCreatePipelineThread = g_thread_new(
     "GstThreadCreatePipeline",
     (GThreadFunc)GstInterface::CreatePipeline, this);
-
 }
 void GstInterface::StopStream(void)
 {
@@ -62,7 +59,7 @@ void GstInterface::StopStream(void)
     }
   }
 
-  std::cout << "Disconnecting signal! Signal ID: "<< _needDataSignalId << std::endl;
+  std::cout << "Disconnecting signal! Signal ID: " << _needDataSignalId << std::endl;
   if (_needDataSignalId != 0) {
     g_signal_handler_disconnect(_appSource, _needDataSignalId);
     _needDataSignalId = 0;
@@ -96,10 +93,10 @@ void GstInterface::StopStream(void)
   }
   if (_mCreatePipelineThread != nullptr) {
     g_thread_join(_mCreatePipelineThread);
-  }/*
+  }
   if (_mLoopContext) {
     g_main_context_unref(_mLoopContext);
-  }*/
+  }
 }
 
 void GstInterface::BuildDefaultPipeline()
@@ -312,13 +309,13 @@ void GstInterface::BuildPipeline()
           _pipeline), _appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
       gst_element_link_many(_appSource, _h26xEncFilter, _h26xparse, _queue1, _rtspSink, NULL);
     }
-    std::cout << "Connecting need-data signal! Signal ID: "<< _needDataSignalId << std::endl;
-  
+    std::cout << "Connecting need-data signal! Signal ID: " << _needDataSignalId << std::endl;
+
     _needDataSignalId =
       g_signal_connect(_appSource, "need-data", G_CALLBACK(GstInterface::NeedDataCallBack), this);
     //GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline_camera");
-    std::cout << "Need-data signal connected! Signal ID: "<< _needDataSignalId << std::endl;
-  
+    std::cout << "Need-data signal connected! Signal ID: " << _needDataSignalId << std::endl;
+
   }
   std::cout << "Getting bus element..." << std::endl;
   _bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
@@ -330,7 +327,6 @@ void GstInterface::BuildPipeline()
   std::cout << "Bus unreferenced. Pipeline created. Calling PlayStream.." << std::endl;
   _mLoopThread = g_thread_new("GstThread", (GThreadFunc)GstInterface::PlayStream, this);
 
-
 }
 
 void GstInterface::NeedDataCallBack(
@@ -339,17 +335,15 @@ void GstInterface::NeedDataCallBack(
 {
   GstInterface * data = (GstInterface *)user_data;
   GstFlowReturn result;
-  //std::cout << "Need data called!" << std::endl;
   if (!data->_isStreamDefault) {
     g_mutex_lock(&data->haveDataCondMutex);
     while (data->queue.empty() and !data->_isStreamShutdown) {
-      // std::cout << "Queue is empty!" << std::endl;
       g_cond_wait(&data->haveDataCond, &data->haveDataCondMutex);
     }
     std::shared_ptr<sensor_msgs::msg::CompressedImage> videoPtr;
     // Mutex might be locked here, if gstreamer is not able to process during shutdown.
     if (data->_isStreamShutdown) {
-      //std::cout << "Shutdown is called, not processing data!" << std::endl;
+      std::cout << "Shutdown is called, not processing data!" << std::endl;
       g_mutex_unlock(&data->haveDataCondMutex);
       return;
     } else {
@@ -364,7 +358,7 @@ void GstInterface::NeedDataCallBack(
     gst_buffer_fill(buffer, 0, &frame[0], frame.size());
     const auto stamp = videoPtr->header.stamp;
     const GstClockTime stampTime = stamp.sec * 1000000000UL + stamp.nanosec;
-     
+
     if (data->_gstStartTimestamp == 0) {
       data->_gstStartTimestamp = data->_gstTimestamp;
     }
@@ -372,8 +366,7 @@ void GstInterface::NeedDataCallBack(
     const GstClockTime fromStart = stampTime - data->_gstStartTimestamp;
     const auto timeDifference = fromStart - data->_gstTimestamp;
     data->_gstTimestamp = fromStart;
-    
-    //const GstClockTime local_stamp = data->_gstTimestamp - data->_gstStartTimestamp;
+
     GST_BUFFER_PTS(buffer) = (gint64)fromStart;
     GST_BUFFER_DURATION(buffer) = (gint64)timeDifference;
 
@@ -421,38 +414,4 @@ void * GstInterface::PlayStream(gpointer data)
   return nullptr;
 }
 
-/*
-void * GstInterface::RestartStream(gpointer data)
-{
-  GstInterface * gstImpl = (GstInterface *)data;
-  std::cout << "Restart Stream thread created." << std::endl;
-
-  std::cout << "GStreamer(RestartStream): Will call StopStream, and Start Stream after 10sec" << std::endl;
-
-  //gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);
-  //gstImpl->_isStreamPlaying = true;
-  //g_main_loop_run(gstImpl->_mLoop);
-  g_thread_exit(gstImpl->_mRestartThread);
-  return nullptr;
-}
-gboolean GstInterface::StreamPlayingRestartCallback(gpointer user_data)
-{
-  GstInterface * gstImpl = (GstInterface *)user_data;
-
-  g_debug("Restart stream because of connection failed.\n");
-  if (gstImpl->_appSource) {
-    gstImpl->_needDataSignalId = g_signal_connect(
-      gstImpl->_appSource, "need-data",
-      G_CALLBACK(GstInterface::NeedDataCallBack), gstImpl);
-  }
-  gst_element_set_state(gstImpl->_pipeline, GST_STATE_PLAYING);
-
-  return G_SOURCE_REMOVE;
-}
-
-// Use this function to execute code when timer is removed.
-void GstInterface::StreamPlayingRestartDone(gpointer user_data)
-{
-  (void)user_data;
-}*/
 } //namespace depthai_ctrl

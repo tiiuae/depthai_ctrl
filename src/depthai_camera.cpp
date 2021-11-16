@@ -54,6 +54,10 @@ void DepthAICamera::Initialize()
   _videoH265 = (get_parameter("encoding").as_string() == "H265");
   _useMonoCams = get_parameter("use_mono_cams").as_bool();
   _useRawColorCam = get_parameter("use_raw_color_cam").as_bool();
+
+  // USB2 can only handle one H264 stream from camera. Adding raw camera or mono cameras will
+  // cause dropped messages and unstable latencies between frames. When using USB3, we can
+  // support multiple streams without any bandwidth issues.
   _useUSB3 = get_parameter("use_usb_three").as_bool();
   _lastFrameTime = get_clock()->now();
 }
@@ -125,6 +129,7 @@ void DepthAICamera::TryRestarting()
 
   _pipeline = std::make_shared<dai::Pipeline>();
 
+  // Using mono cameras adds additional CPU consumption, therefore it is disabled by default
   if (_useMonoCams) {
     auto monoLeft = _pipeline->create<dai::node::MonoCamera>();
     auto monoRight = _pipeline->create<dai::node::MonoCamera>();
@@ -154,6 +159,7 @@ void DepthAICamera::TryRestarting()
   colorCamera->setVideoSize(_videoWidth, _videoHeight);
   colorCamera->setFps(_videoFps);
 
+  // Like mono cameras, color camera is disabled by default to reduce computational load.
   if (_useRawColorCam) {
     auto xoutColor = _pipeline->create<dai::node::XLinkOut>();
     xoutColor->setStreamName("color");
@@ -171,7 +177,6 @@ void DepthAICamera::TryRestarting()
   videoEncoder->bitstream.link(xoutVideo->input);
   auto xinColor = _pipeline->create<dai::node::XLinkIn>();
   xinColor->setStreamName("colorCamCtrl");
-
 
   xinColor->out.link(colorCamera->inputControl);
   RCLCPP_INFO(this->get_logger(), "[%s]: Initializing DepthAI camera...", get_name());
@@ -311,29 +316,34 @@ void DepthAICamera::onVideoEncoderCallback(
     this->get_logger(), "[%s]: Received %d video frames...",
     get_name(), videoPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & videoPtr : videoPtrVector) {
-    //const auto stamp = videoPtr->getTimestamp();
+    
+    /*
+      Old implementation uses getTimestamp, which had a bug where the time is not correct when run at boot.
+      getTimestamp is host syncronized and supposed to give the time in host clock.
+      However, since the DepthAI camera is starting its boot at the same time as the host,
+      The syncronization is not working properly as it tries to syncronize the camera clock with the host.
+      Therefore, we use the getTimestampDevice() to get direct device time.
+      This implementation will work without any problems for the H264 video streaming.
+      However, a host syncronized time is needed for the raw color camera, when doing camera based navigation.
+      Otherwise, the time drifts will cause wrong estimations and tracking will be unstable. 
+
+      It is also possible to use SequenceNumber for timestamp calculation, and it also works for H264 streaming.
+      However, it might still be problematic with the raw color camera. It will be investigated later.
+    */
+    //const auto stamp = videoPtr->getTimestamp().time_since_epoch().count();
     const auto stamp = videoPtr->getTimestampDevice().time_since_epoch().count();
     //const auto seq = videoPtr->getSequenceNum();
     //int64_t stamp = (int64_t)seq * (1e9/_videoFps); // Use sequence number for timestamp
+
     CompressedImageMsg video_stream_chunk{};
     video_stream_chunk.header.frame_id = _color_camera_frame;
+
+    // rclcpp::Time can be initialized directly with nanoseconds only.
+    // Internally, when given with seconds and nanoseconds, it casts it to nanoseconds anyways.
     video_stream_chunk.header.stamp = rclcpp::Time(stamp, RCL_STEADY_TIME);
-
     video_stream_chunk.data.swap(videoPtr->getData());
-    
-    //RCLCPP_INFO(
-    //  this->get_logger(), "[%s]:[Seq:%04ld]-Received chunk Timestamp: %ld Publishing video frame at %d.%09d",
-    //  get_name(), videoPtr->getSequenceNum(), stamp, video_stream_chunk.header.stamp.sec, video_stream_chunk.header.stamp.nanosec);
-
     video_stream_chunk.format = _videoH265 ? "H265" : "H264";
     _video_publisher->publish(video_stream_chunk);
-
-    /*RCLCPP_DEBUG(
-      this->get_logger(), "[%s]: Since last frame %d - Frame timestamp %ld", get_name(),
-      (this->get_clock()->now() - _lastFrameTime).nanoseconds(),
-      stamp.time_since_epoch().count() - _lastFrameTimePoint);
-    _lastFrameTime = this->get_clock()->now();
-    _lastFrameTimePoint = stamp.time_since_epoch().count();*/
   }
 }
 
