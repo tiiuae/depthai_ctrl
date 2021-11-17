@@ -97,8 +97,8 @@ if (BUILD_TESTING)
   ament_target_dependencies(depthai_camera_test rclcpp rclcpp_components)
   ament_target_dependencies(depthai_gstreamer_test PUBLIC rclcpp rclcpp_components)
 
-  target_link_libraries(depthai_camera_test depthai_camera gtest)
-  target_link_libraries(depthai_gstreamer_test PUBLIC depthai_gstreamer ${GST_LIBRARIES} gstapp-1.0 gstrtspserver-1.0 gtest)
+  target_link_libraries(depthai_camera_test depthai_camera gtest pthread)
+  target_link_libraries(depthai_gstreamer_test PUBLIC depthai_gstreamer gstreamer_interface ${GST_LIBRARIES} gstapp-1.0 gstrtspserver-1.0 gtest pthread)
 
   add_dependencies(depthai_camera_test depthai_camera)
   add_dependencies(depthai_gstreamer_test depthai_gstreamer)

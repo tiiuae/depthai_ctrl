@@ -65,7 +65,13 @@ void DepthAICamera::Initialize()
 
 void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
 {
-  auto cmd = nlohmann::json::parse(msg->data.c_str());
+  nlohmann::json cmd{};
+  try {
+    cmd = nlohmann::json::parse(msg->data.c_str());
+  } catch (...) {
+    RCLCPP_ERROR(this->get_logger(), "Error while parsing JSON string from VideoCommand");
+    return;
+  }
   if (!cmd["Command"].empty()) {
     std::string command = cmd["Command"];
     std::transform(
@@ -180,12 +186,15 @@ void DepthAICamera::TryRestarting()
 
   xinColor->out.link(colorCamera->inputControl);
   RCLCPP_INFO(this->get_logger(), "[%s]: Initializing DepthAI camera...", get_name());
-  try {
-    _device = std::make_shared<dai::Device>(*_pipeline, !_useUSB3);
-  } catch (const std::runtime_error & err) {
-    RCLCPP_ERROR(get_logger(), "Cannot start DepthAI camera: " + std::string(err.what()));
-    _device.reset();
-    throw err;
+  for (int i = 0; i < 5 && !_device; i++) {
+    try {
+      _device = std::make_shared<dai::Device>(*_pipeline, !_useUSB3);
+    } catch (const std::runtime_error & err) {
+      RCLCPP_ERROR(get_logger(), "Cannot start DepthAI camera: " + std::string(err.what()));
+      _device.reset();
+    }
+  }
+  if (!_device) {
     return;
   }
 
@@ -315,7 +324,7 @@ void DepthAICamera::onVideoEncoderCallback(
     this->get_logger(), "[%s]: Received %d video frames...",
     get_name(), videoPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & videoPtr : videoPtrVector) {
-    
+
     /*
       Old implementation uses getTimestamp, which had a bug where the time is not correct when run at boot.
       getTimestamp is host syncronized and supposed to give the time in host clock.
@@ -324,7 +333,7 @@ void DepthAICamera::onVideoEncoderCallback(
       Therefore, we use the getTimestampDevice() to get direct device time.
       This implementation will work without any problems for the H264 video streaming.
       However, a host syncronized time is needed for the raw color camera, when doing camera based navigation.
-      Otherwise, the time drifts will cause wrong estimations and tracking will be unstable. 
+      Otherwise, the time drifts will cause wrong estimations and tracking will be unstable.
 
       It is also possible to use SequenceNumber for timestamp calculation, and it also works for H264 streaming.
       However, it might still be problematic with the raw color camera. It will be investigated later.

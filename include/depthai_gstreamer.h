@@ -20,8 +20,9 @@ class DepthAIGStreamer : public rclcpp::Node
     DepthAIGStreamer(const rclcpp::NodeOptions & options);
     ~DepthAIGStreamer();
 
-  bool isStreamPlaying() { return _impl->IsStreamPlaying();}
-  bool isStreamDefault() { return _impl->IsStreamDefault();}
+  bool IsStreamPlaying() { return _impl->IsStreamPlaying();}
+  bool IsStreamDefault() { return _impl->IsStreamDefault();}
+  bool IsErrorDetected() { return _impl->IsErrorDetected();}
   private:
 
     GstInterface *_impl;

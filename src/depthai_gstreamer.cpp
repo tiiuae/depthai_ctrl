@@ -28,7 +28,7 @@ DepthAIGStreamer::DepthAIGStreamer(int argc, char * argv[])
 DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions & options)
 : Node("depthai_gstreamer", options), _impl(nullptr)
 {
-  
+
   _impl = new GstInterface(0, 0);
   if (_impl != nullptr) {
     _impl = _impl;
@@ -113,7 +113,7 @@ void DepthAIGStreamer::Initialize()
   _is_stop_requested = !get_parameter("start_stream_on_boot").as_bool();
   if (get_parameter("start_stream_on_boot").as_bool()) {
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer: start video stream on boot");
-    
+
     RCLCPP_INFO(this->get_logger(), "Resetting timer.");
     _handle_stream_status_timer->reset();
     g_mutex_lock(&_impl->haveDataCondMutex);
@@ -129,20 +129,21 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
 {
   const auto stamp = video_msg->header.stamp;
   const long long stampTime = stamp.sec * 1000000000UL + stamp.nanosec;
-  
+
   RCLCPP_DEBUG(
     get_logger(),
-    "[GST %s]RECEIVED CHUNK Timestamp: %ld #" + std::to_string(stamp.sec) + "." + std::to_string(stamp.nanosec),
-    _impl->IsStreamPlaying() ? "STREAMING" : "STOPPED",stampTime);
-  
-    g_mutex_lock(&_impl->haveDataCondMutex);
+    "[GST %s]RECEIVED CHUNK Timestamp: %ld #" + std::to_string(stamp.sec) + "." +
+    std::to_string(stamp.nanosec),
+    _impl->IsStreamPlaying() ? "STREAMING" : "STOPPED", stampTime);
+
+  g_mutex_lock(&_impl->haveDataCondMutex);
   _impl->queue.push(video_msg);
   // When message queue is too big - delete old messages
   if (_impl->queue.size() > 200) {
     _impl->queue.pop();
   }
-    g_cond_signal(&_impl->haveDataCond);
-    g_mutex_unlock(&_impl->haveDataCondMutex);
+  g_cond_signal(&_impl->haveDataCond);
+  g_mutex_unlock(&_impl->haveDataCondMutex);
 }
 
 
@@ -150,20 +151,20 @@ void DepthAIGStreamer::HandleStreamStatus()
 {
   if (!_is_stop_requested) {
     if (!_impl->IsStreamPlaying()) {
-      if (!_impl->IsStreamStarting()){
-      RCLCPP_INFO(get_logger(), "DepthAI GStreamer: try to start video stream");
-      
-      g_mutex_lock(&_impl->haveDataCondMutex);
-      RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
-      std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
-      g_mutex_unlock(&_impl->haveDataCondMutex);
-      _impl->StartStream();
+      if (!_impl->IsStreamStarting()) {
+        RCLCPP_INFO(get_logger(), "DepthAI GStreamer: try to start video stream");
+
+        g_mutex_lock(&_impl->haveDataCondMutex);
+        RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
+        std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
+        g_mutex_unlock(&_impl->haveDataCondMutex);
+        _impl->StartStream();
       } else {
         RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Start failed, stop stream");
-      _impl->StopStream();
+        _impl->StopStream();
       }
-    } else if (_impl->IsStreamPlaying()){
-        RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Stream running okay.");
+    } else if (_impl->IsStreamPlaying()) {
+      RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Stream running okay.");
     }
   } else {
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Waiting for start command.");
@@ -173,7 +174,13 @@ void DepthAIGStreamer::HandleStreamStatus()
 void DepthAIGStreamer::VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg)
 {
   RCLCPP_INFO(this->get_logger(), "Command to process: '%s'", msg->data.c_str());
-  auto cmd = nlohmann::json::parse(msg->data.c_str());
+  nlohmann::json cmd{};
+  try {
+    cmd = nlohmann::json::parse(msg->data.c_str());
+  } catch (...) {
+    RCLCPP_ERROR(this->get_logger(), "Error while parsing JSON string from VideoCommand");
+    return;
+  }
   if (!cmd["Command"].empty()) {
     std::string command = cmd["Command"];
     std::transform(

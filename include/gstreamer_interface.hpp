@@ -196,6 +196,12 @@ public:
   //!
   bool IsStreamStarting() {return _isStreamStarting;}
 
+  //! @brief Return is error detected private boolean.
+  //! Error might be caused by connection error, network failure..
+  //! @return true if error detected, false otherwise.
+  //!
+  bool IsErrorDetected() {return _isErrorDetected;}
+
   //! @brief Incoming message queue, shared with ROS2 node.
   std::queue<CompressedImageMsg::SharedPtr> queue {};
 
@@ -209,7 +215,7 @@ protected:
   //! @return void
   //!
   static void * PlayStream(gpointer data);
-  
+
   //! @brief Create pipeline for the stream
   //! This function is called from StartStream function in a g_thread
   //! It waits two seconds for the data to be received from the ROS2 node
@@ -328,11 +334,21 @@ protected:
           GST_OBJECT_NAME(message->src),
           gst_element_state_get_name(old_state),
           gst_element_state_get_name(new_state));
-        if (g_strrstr(GST_OBJECT_NAME(message->src), "rtspbin") &&
-          new_state == GST_STATE_PLAYING)
-        {
-          depthAIGst->_isStreamPlaying = true;
+        if (new_state == GST_STATE_PLAYING) {
+          if (g_strrstr(GST_OBJECT_NAME(message->src), "rtspbin"))
+          {
+            depthAIGst->_isStreamPlaying = true;
+            depthAIGst->_isErrorDetected = false;
+          }
+          if ((depthAIGst->_streamAddress.find("udp://") == 0)){
+            if (g_strrstr(GST_OBJECT_NAME(message->src), "default_pipeline")||
+              g_strrstr(GST_OBJECT_NAME(message->src), "rgbCamSink_pipeline")){
+              depthAIGst->_isStreamPlaying = true;
+              depthAIGst->_isErrorDetected = false;
+            }
+          }
         }
+
         break;
 
       case GST_MESSAGE_EOS:
@@ -371,7 +387,7 @@ protected:
           GST_OBJECT_NAME(message->src), error->message);
         g_printerr("Debugging info: %s\n", (errDebug) ? errDebug : "none");
         depthAIGst->_isStreamPlaying = false;
-        
+        depthAIGst->_isErrorDetected = true;
         g_error_free(error);
         g_free(errDebug);
         break;
@@ -412,6 +428,8 @@ private:
   bool _isStreamDefault = false;
   //! @brief is stream shutdown started flag
   bool _isStreamShutdown = false;
+  //! @brief is error detected flag
+  bool _isErrorDetected = false;
   //! @brief The main gst loop context
   GMainContext * _mLoopContext;
   //! @brief Pipeline creating thread, only ran once
@@ -434,6 +452,7 @@ private:
   GstElement * _h26xparse;
   GstElement * _h26xpay;
   GstElement * _udpSink;
+  GstElement * _videoConvert;
   GstElement * _queue1;
   GstElement * _rtspSink;
   //! @brief The start time is saved for the first frame
