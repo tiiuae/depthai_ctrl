@@ -116,10 +116,6 @@ void DepthAIGStreamer::Initialize()
 
     RCLCPP_INFO(this->get_logger(), "Resetting timer.");
     _handle_stream_status_timer->reset();
-    g_mutex_lock(&_impl->haveDataCondMutex);
-    RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
-    std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
-    g_mutex_unlock(&_impl->haveDataCondMutex);
     _impl->StartStream();
   }
 
@@ -139,7 +135,7 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
   g_mutex_lock(&_impl->haveDataCondMutex);
   _impl->queue.push(video_msg);
   // When message queue is too big - delete old messages
-  if (_impl->queue.size() > 200) {
+  if (_impl->queue.size() > (size_t)_impl->GetEncoderFps() * 2) {
     _impl->queue.pop();
   }
   g_cond_signal(&_impl->haveDataCond);
@@ -154,17 +150,34 @@ void DepthAIGStreamer::HandleStreamStatus()
       if (!_impl->IsStreamStarting()) {
         RCLCPP_INFO(get_logger(), "DepthAI GStreamer: try to start video stream");
 
-        g_mutex_lock(&_impl->haveDataCondMutex);
-        RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
-        std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
-        g_mutex_unlock(&_impl->haveDataCondMutex);
         _impl->StartStream();
       } else {
         RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Start failed, stop stream");
         _impl->StopStream();
       }
     } else if (_impl->IsStreamPlaying()) {
-      RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Stream running okay.");
+      RCLCPP_INFO(
+        get_logger(), "DepthAI GStreamer: Stream running okay in %s mode.",
+        _impl->IsStreamDefault() ? "default" : "camera streaming");
+      
+      if (_impl->IsStreamDefault()) {
+        if (_impl->queue.size() > (size_t)_impl->GetEncoderFps()) {
+          RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Stream is default, but have data with size of %ld.", _impl->queue.size());
+          RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Switching to camera stream.");
+          _impl->StopStream();
+        }
+      } else {
+        if (_video_subscriber->get_publisher_count() == 0) {
+          RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Stream is running, but no publisher.");
+          RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Switching to default stream.");
+          
+          g_mutex_lock(&_impl->haveDataCondMutex);
+          RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
+          std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
+          g_mutex_unlock(&_impl->haveDataCondMutex);
+          _impl->StopStream();
+        }
+      }
     }
   } else {
     RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Waiting for start command.");
