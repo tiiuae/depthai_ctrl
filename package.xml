@@ -3,6 +3,7 @@
 <package format="3">
   <name>depthai_ctrl</name>
   <version>2.0.0</version>
+
   <description>DepthAI camera control ROS2 node</description>
   <maintainer email="manuel.segarra-abad@unikie.com">Manuel Segarra-Abad</maintainer>
   <maintainer email="sergey.smirnov@unikie.com">Sergey Smirnov</maintainer>
