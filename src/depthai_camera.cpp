@@ -119,7 +119,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
         _useRawColorCam = useRawColorCam;
         TryRestarting();
       } else {
-        RCLCPP_ERROR(this->get_logger(), error_message);
+        RCLCPP_ERROR(this->get_logger(), error_message.c_str());
       }
     }
   }
@@ -190,7 +190,7 @@ void DepthAICamera::TryRestarting()
     try {
       _device = std::make_shared<dai::Device>(*_pipeline, !_useUSB3);
     } catch (const std::runtime_error & err) {
-      RCLCPP_ERROR(get_logger(), "Cannot start DepthAI camera: " + std::string(err.what()));
+      RCLCPP_ERROR(get_logger(), "Cannot start DepthAI camera: %s", err.what());
       _device.reset();
     }
   }
@@ -274,7 +274,7 @@ void DepthAICamera::onLeftCamCallback(
   std::vector<std::shared_ptr<dai::ImgFrame>> leftPtrVector =
     _leftQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
-    this->get_logger(), "[%s]: Received %d left camera frames...",
+    this->get_logger(), "[%s]: Received %ld left camera frames...",
     get_name(), leftPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & leftPtr : leftPtrVector) {
     auto image = ConvertImage(leftPtr, _left_camera_frame);
@@ -290,7 +290,7 @@ void DepthAICamera::onRightCallback(
   std::vector<std::shared_ptr<dai::ImgFrame>> rightPtrVector =
     _rightQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
-    this->get_logger(), "[%s]: Received %d right camera frames...",
+    this->get_logger(), "[%s]: Received %ld right camera frames...",
     get_name(), rightPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & rightPtr : rightPtrVector) {
     auto image = ConvertImage(rightPtr, _right_camera_frame);
@@ -305,7 +305,7 @@ void DepthAICamera::onColorCamCallback(
   std::vector<std::shared_ptr<dai::ImgFrame>> colorPtrVector =
     _colorQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
-    this->get_logger(), "[%s]: Received %d color camera frames...",
+    this->get_logger(), "[%s]: Received %ld color camera frames...",
     get_name(), colorPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & colorPtr : colorPtrVector) {
     auto image = ConvertImage(colorPtr, _color_camera_frame);
@@ -321,7 +321,7 @@ void DepthAICamera::onVideoEncoderCallback(
   std::vector<std::shared_ptr<dai::ImgFrame>> videoPtrVector =
     _videoQueue->tryGetAll<dai::ImgFrame>();
   RCLCPP_DEBUG(
-    this->get_logger(), "[%s]: Received %d video frames...",
+    this->get_logger(), "[%s]: Received %ld video frames...",
     get_name(), videoPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & videoPtr : videoPtrVector) {
 
