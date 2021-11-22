@@ -29,6 +29,11 @@ class DepthAIGStreamer : public rclcpp::Node
     rclcpp::Subscription<CompressedImageMsg>::SharedPtr _video_subscriber;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
     rclcpp::TimerBase::SharedPtr _handle_stream_status_timer;
+
+    rclcpp::CallbackGroup::SharedPtr _callback_group_timer;
+    rclcpp::CallbackGroup::SharedPtr _callback_group_video_subscriber;
+    rclcpp::CallbackGroup::SharedPtr _callback_group_cmd_subscriber;
+
     bool _is_stop_requested;
     
     void Initialize();

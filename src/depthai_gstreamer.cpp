@@ -50,19 +50,35 @@ void DepthAIGStreamer::Initialize()
   declare_parameter<std::string>("video_stream_topic", "camera/color/video");
 
   const std::string video_stream_topic = get_parameter("video_stream_topic").as_string();
+
+  _callback_group_timer = this->create_callback_group(
+    rclcpp::CallbackGroupType::MutuallyExclusive);
+
+  _callback_group_video_subscriber = this->create_callback_group(
+    rclcpp::CallbackGroupType::MutuallyExclusive);
+
+  _callback_group_cmd_subscriber = this->create_callback_group(
+    rclcpp::CallbackGroupType::MutuallyExclusive);
+
+  auto video_sub_opt = rclcpp::SubscriptionOptions();
+  video_sub_opt.callback_group = _callback_group_video_subscriber;
+
+  auto cmd_sub_opt = rclcpp::SubscriptionOptions();
+  cmd_sub_opt.callback_group = _callback_group_cmd_subscriber;
+
   _video_subscriber = create_subscription<CompressedImageMsg>(
     video_stream_topic,
     rclcpp::SystemDefaultsQoS(),
-    std::bind(&DepthAIGStreamer::GrabVideoMsg, this, std::placeholders::_1));
+    std::bind(&DepthAIGStreamer::GrabVideoMsg, this, std::placeholders::_1), video_sub_opt);
 
   _stream_command_subscriber = this->create_subscription<std_msgs::msg::String>(
     "videostreamcmd",
     rclcpp::SystemDefaultsQoS(),
-    std::bind(&DepthAIGStreamer::VideoStreamCommand, this, std::placeholders::_1));
+    std::bind(&DepthAIGStreamer::VideoStreamCommand, this, std::placeholders::_1), cmd_sub_opt);
 
   _handle_stream_status_timer = this->create_wall_timer(
     std::chrono::milliseconds(10000),
-    std::bind(&DepthAIGStreamer::HandleStreamStatus, this)); // 10 sec
+    std::bind(&DepthAIGStreamer::HandleStreamStatus, this), _callback_group_timer); // 10 sec
 
   declare_parameter<int>("width", 1280);
   declare_parameter<int>("height", 720);
@@ -159,10 +175,12 @@ void DepthAIGStreamer::HandleStreamStatus()
       RCLCPP_INFO(
         get_logger(), "DepthAI GStreamer: Stream running okay in %s mode.",
         _impl->IsStreamDefault() ? "default" : "camera streaming");
-      
+
       if (_impl->IsStreamDefault()) {
         if (_impl->queue.size() > (size_t)_impl->GetEncoderFps()) {
-          RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Stream is default, but have data with size of %ld.", _impl->queue.size());
+          RCLCPP_INFO(
+            get_logger(), "DepthAI GStreamer: Stream is default, but have data with size of %ld.",
+            _impl->queue.size());
           RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Switching to camera stream.");
           _impl->StopStream();
         }
@@ -170,7 +188,7 @@ void DepthAIGStreamer::HandleStreamStatus()
         if (_video_subscriber->get_publisher_count() == 0) {
           RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Stream is running, but no publisher.");
           RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Switching to default stream.");
-          
+
           g_mutex_lock(&_impl->haveDataCondMutex);
           RCLCPP_INFO(get_logger(), "DepthAI GStreamer: Clearing queue for start");
           std::queue<CompressedImageMsg::SharedPtr>().swap(_impl->queue);
