@@ -2,10 +2,13 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>depthai_ctrl</name>
-  <version>1.0.2</version>
+  <version>2.0.0</version>
+
   <description>DepthAI camera control ROS2 node</description>
   <maintainer email="manuel.segarra-abad@unikie.com">Manuel Segarra-Abad</maintainer>
   <maintainer email="sergey.smirnov@unikie.com">Sergey Smirnov</maintainer>
+  <maintainer email="mehmet.killioglu@unikie.com">Mehmet Killioglu</maintainer>
+  
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

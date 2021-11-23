@@ -87,6 +87,7 @@ struct DepthAIUtils
     {
         std::string udp_protocol = "udp://";
         std::string rtsp_protocol = "rtsp://";
+        std::string rtsps_protocol = "rtsps://";
         std::string protocol;
         std::string addr = address;
 
@@ -105,6 +106,11 @@ struct DepthAIUtils
         {
             protocol = "rtsp";
             addr.erase(0, rtsp_protocol.size());
+        }
+        else if (addr.find(rtsps_protocol) == 0)
+        {
+            protocol = "rtsps";
+            addr.erase(0, rtsps_protocol.size());
         }
         else
         {
@@ -128,7 +134,7 @@ struct DepthAIUtils
                 return false;
             }
         }
-        else if (protocol == "rtsp")
+        else if (protocol == "rtsp" || protocol == "rtsps")
         {
             std::string user, key, path;
             user = addr.substr(0, addr.find(':'));

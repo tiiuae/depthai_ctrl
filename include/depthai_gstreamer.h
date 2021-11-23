@@ -5,6 +5,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <gstreamer_interface.hpp>
 
 namespace depthai_ctrl
 {
@@ -19,18 +20,25 @@ class DepthAIGStreamer : public rclcpp::Node
     DepthAIGStreamer(const rclcpp::NodeOptions & options);
     ~DepthAIGStreamer();
 
-    bool isStreamPlaying();
-    bool isStreamDefault();
-
+  bool IsStreamPlaying() { return _impl->IsStreamPlaying();}
+  bool IsStreamDefault() { return _impl->IsStreamDefault();}
+  bool IsErrorDetected() { return _impl->IsErrorDetected();}
   private:
 
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    GstInterface *_impl;
     rclcpp::Subscription<CompressedImageMsg>::SharedPtr _video_subscriber;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
+    rclcpp::TimerBase::SharedPtr _handle_stream_status_timer;
 
+    rclcpp::CallbackGroup::SharedPtr _callback_group_timer;
+    rclcpp::CallbackGroup::SharedPtr _callback_group_video_subscriber;
+    rclcpp::CallbackGroup::SharedPtr _callback_group_cmd_subscriber;
+
+    bool _is_stop_requested;
+    
     void Initialize();
     void GrabVideoMsg(CompressedImageMsg::SharedPtr video_msg);
+    void HandleStreamStatus();
     void VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg);
 
 };
