@@ -19,9 +19,7 @@ DepthAIGStreamer::DepthAIGStreamer(int argc, char * argv[])
 : Node("depthai_gstreamer"), _impl(nullptr)
 {
   _impl = new GstInterface(argc, argv);
-  if (_impl != nullptr) {
-    _impl = _impl;
-  }
+  
   Initialize();
 }
 
@@ -30,9 +28,7 @@ DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions & options)
 {
 
   _impl = new GstInterface(0, 0);
-  if (_impl != nullptr) {
-    _impl = _impl;
-  }
+  
   Initialize();
 }
 

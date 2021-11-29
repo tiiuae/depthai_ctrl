@@ -122,7 +122,6 @@ private:
   bool _useRawColorCam;
   bool _useUSB3;
   rclcpp::Time _lastFrameTime;
-  long int _lastFrameTimePoint;
 
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _left_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _right_publisher;
