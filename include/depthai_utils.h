@@ -38,6 +38,7 @@ struct DepthAIUtils
                                          const int height,
                                          const int fps,
                                          const int bitrate,
+                                         const int lens_position,
                                          std::string encoding,
                                          std::string& error)
     {
@@ -61,6 +62,12 @@ struct DepthAIUtils
         if (bitrate < 400000)
         {
             error = "Required video stream 'bitrate' is incorrect.";
+            return false;
+        }
+
+        if (lens_position < 0 || lens_position > 255)
+        {
+            error = "Required video stream 'lens_position' is incorrect.";
             return false;
         }
 
