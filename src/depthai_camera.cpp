@@ -46,6 +46,7 @@ void DepthAICamera::Initialize()
   declare_parameter<int>("lens_position", 120);
   declare_parameter<bool>("use_mono_cams", false);
   declare_parameter<bool>("use_raw_color_cam", false);
+  declare_parameter<bool>("use_video_from_color_cam", true);
   declare_parameter<bool>("use_auto_focus", false);
   declare_parameter<bool>("use_usb_three", false);
 
@@ -57,6 +58,7 @@ void DepthAICamera::Initialize()
   _videoH265 = (get_parameter("encoding").as_string() == "H265");
   _useMonoCams = get_parameter("use_mono_cams").as_bool();
   _useRawColorCam = get_parameter("use_raw_color_cam").as_bool();
+  _useVideoFromColorCam = get_parameter("use_video_from_color_cam").as_bool();
   _useAutoFocus = get_parameter("use_auto_focus").as_bool();
 
   // USB2 can only handle one H264 stream from camera. Adding raw camera or mono cameras will
@@ -146,15 +148,16 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
       if (_useAutoFocus != useAutoFocus) {
         _useAutoFocus = useAutoFocus;
         changeFocusMode(_useAutoFocus);
-        RCLCPP_INFO(this->get_logger(), "Change focus mode to %s",
+        RCLCPP_INFO(
+          this->get_logger(), "Change focus mode to %s",
           _useAutoFocus ? "auto" : "manual");
       }
       if (useAutoFocus) {
         RCLCPP_ERROR(this->get_logger(), "Cannot change focus while auto focus is enabled");
       } else {
-        
+
         int videoLensPosition = get_parameter("lens_position").as_int();
-        
+
         if (!cmd["LensPosition"].empty() && cmd["LensPosition"].is_number_integer()) {
           nlohmann::from_json(cmd["LensPosition"], videoLensPosition);
           RCLCPP_INFO(this->get_logger(), "Received lens position cmd of %d", videoLensPosition);
@@ -169,7 +172,6 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
             Valid range is 0-255");
         }
       }
-
     }
   }
 }
@@ -217,10 +219,15 @@ void DepthAICamera::TryRestarting()
   // Like mono cameras, color camera is disabled by default to reduce computational load.
   if (_useRawColorCam) {
     auto xoutColor = _pipeline->create<dai::node::XLinkOut>();
-    xoutColor->setStreamName("color");
-    colorCamera->preview.link(xoutColor->input);
+      xoutColor->setStreamName("color");
+    if (_useVideoFromColorCam) {
+      xoutColor->input.setBlocking(false);
+      xoutColor->input.setQueueSize(1);
+      colorCamera->video.link(xoutColor->input);
+    } else {
+      colorCamera->preview.link(xoutColor->input);
+    }
   }
-
   Profile encoding = _videoH265 ? Profile::H265_MAIN : Profile::H264_MAIN;
   videoEncoder->setDefaultProfilePreset(_videoWidth, _videoHeight, _videoFps, encoding);
   videoEncoder->setBitrate(_videoBitrate);
@@ -447,14 +454,79 @@ std::shared_ptr<DepthAICamera::ImageMsg> DepthAICamera::ConvertImage(
   message->header.stamp = rclcpp::Time(sec, nsec, RCL_STEADY_TIME);
   message->header.frame_id = frame_id;
 
-  if (encodingEnumMap.find(input->getType()) != encodingEnumMap.end()) {
+
+  if (planarEncodingEnumMap.find(input->getType()) != planarEncodingEnumMap.end()) {
+    // cv::Mat inImg = input->getCvFrame();
+    cv::Mat mat, output;
+    cv::Size size = {0, 0};
+    int type = 0;
+    switch (input->getType()) {
+      case dai::RawImgFrame::Type::BGR888p:
+      case dai::RawImgFrame::Type::RGB888p:
+        size = cv::Size(input->getWidth(), input->getHeight());
+        type = CV_8UC3;
+        break;
+      case dai::RawImgFrame::Type::YUV420p:
+      case dai::RawImgFrame::Type::NV12:
+        size = cv::Size(input->getWidth(), input->getHeight() * 3 / 2);
+        type = CV_8UC1;
+        break;
+
+      default:
+        std::runtime_error("Invalid dataType inputs..");
+        break;
+    }
+    mat = cv::Mat(size, type, input->getData().data());
+
+    switch (input->getType()) {
+      case dai::RawImgFrame::Type::RGB888p: {
+          cv::Size s(input->getWidth(), input->getHeight());
+          std::vector<cv::Mat> channels;
+          // RGB
+          channels.push_back(cv::Mat(s, CV_8UC1, input->getData().data() + s.area() * 2));
+          channels.push_back(cv::Mat(s, CV_8UC1, input->getData().data() + s.area() * 1));
+          channels.push_back(cv::Mat(s, CV_8UC1, input->getData().data() + s.area() * 0));
+          cv::merge(channels, output);
+        } break;
+
+      case dai::RawImgFrame::Type::BGR888p: {
+          cv::Size s(input->getWidth(), input->getHeight());
+          std::vector<cv::Mat> channels;
+          // BGR
+          channels.push_back(cv::Mat(s, CV_8UC1, input->getData().data() + s.area() * 0));
+          channels.push_back(cv::Mat(s, CV_8UC1, input->getData().data() + s.area() * 1));
+          channels.push_back(cv::Mat(s, CV_8UC1, input->getData().data() + s.area() * 2));
+          cv::merge(channels, output);
+        } break;
+
+      case dai::RawImgFrame::Type::YUV420p:
+        cv::cvtColor(mat, output, cv::ColorConversionCodes::COLOR_YUV2BGR_IYUV);
+        break;
+
+      case dai::RawImgFrame::Type::NV12:
+        cv::cvtColor(mat, output, cv::ColorConversionCodes::COLOR_YUV2BGR_NV12);
+        break;
+
+      default:
+        output = mat.clone();
+        break;
+    }
+
+    cv_bridge::CvImage(message->header, sensor_msgs::image_encodings::BGR8, output).toImageMsg(
+      *message);
+  } else if (encodingEnumMap.find(input->getType()) != encodingEnumMap.end()) {
     message->encoding = encodingEnumMap[input->getType()];
+    if (message->encoding == "16UC1") {
+      message->is_bigendian = false;
+    } else {
+      message->is_bigendian = true;
+    }
+    message->height = input->getHeight();
+    message->width = input->getWidth();
+    message->step = input->getData().size() / input->getHeight();
+    message->data.swap(input->getData());
   }
 
-  message->height = input->getHeight();
-  message->width = input->getWidth();
-  message->step = input->getData().size() / input->getHeight();
-  message->data.swap(input->getData());
   return message;
 }
 

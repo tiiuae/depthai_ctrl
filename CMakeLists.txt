@@ -39,6 +39,18 @@ find_package(sensor_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 find_package(nlohmann_json REQUIRED)
+find_package(vision_opencv REQUIRED)
+
+find_package(cv_bridge REQUIRED)
+
+set(_opencv_version 4)
+find_package(OpenCV 4 QUIET COMPONENTS imgproc highgui)
+if(NOT OpenCV_FOUND)
+  message(STATUS "----------------Did not find OpenCV 4, trying OpenCV 3--------------")
+  set(_opencv_version 3)
+  find_package(OpenCV 3 REQUIRED COMPONENTS imgproc highgui)
+endif()
+
 
 include_directories(SYSTEM ${GST_INCLUDE_DIRS})
 include_directories(include)
@@ -46,8 +58,8 @@ link_directories(${GST_LIBRARY_DIRS})
 
 # DepthAI Camera as Component library
 add_library(depthai_camera SHARED src/depthai_camera.cpp)
-ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs)
-target_link_libraries(depthai_camera PUBLIC depthai-core)
+ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs cv_bridge vision_opencv)
+target_link_libraries(depthai_camera PUBLIC depthai-core opencv_imgproc opencv_highgui)
 
 
 # DepthAI Camera as separate node
