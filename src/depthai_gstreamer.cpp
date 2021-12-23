@@ -17,15 +17,15 @@
 
 /* Authors(Unikie Oy): Mehmet Killioglu, Manuel Segarra-Abad, Sergey */
 
-#include "depthai_gstreamer.h"
-#include "depthai_utils.h"
+#include "depthai_ctrl/depthai_gstreamer.h"
+#include "depthai_ctrl/depthai_utils.h"
 #include <gst/app/gstappsrc.h>
 #include <gst/gst.h>
 #include <gst/gstbus.h>
 #include <gst/gstcaps.h>
 #include <gst/gstelement.h>
 #include <gst/gstpipeline.h>
-#include <gstreamer_interface.hpp>
+#include <depthai_ctrl/gstreamer_interface.hpp>
 #include <nlohmann/json.hpp>
 #include <mutex>
 #include <queue>
@@ -62,9 +62,6 @@ DepthAIGStreamer::~DepthAIGStreamer()
 
 void DepthAIGStreamer::Initialize()
 {
-  declare_parameter<std::string>("video_stream_topic", "camera/color/video");
-
-  const std::string video_stream_topic = get_parameter("video_stream_topic").as_string();
 
   _callback_group_timer = this->create_callback_group(
     rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -81,14 +78,15 @@ void DepthAIGStreamer::Initialize()
   auto cmd_sub_opt = rclcpp::SubscriptionOptions();
   cmd_sub_opt.callback_group = _callback_group_cmd_subscriber;
 
+  rclcpp::QoS qos_profile(10);
   _video_subscriber = create_subscription<CompressedImageMsg>(
-    video_stream_topic,
-    rclcpp::SystemDefaultsQoS(),
+    "camera_node/color/video",
+    qos_profile,
     std::bind(&DepthAIGStreamer::GrabVideoMsg, this, std::placeholders::_1), video_sub_opt);
 
   _stream_command_subscriber = this->create_subscription<std_msgs::msg::String>(
     "gstreamer/videostreamcmd",
-    rclcpp::SystemDefaultsQoS(),
+    qos_profile,
     std::bind(&DepthAIGStreamer::VideoStreamCommand, this, std::placeholders::_1), cmd_sub_opt);
 
   _handle_stream_status_timer = this->create_wall_timer(

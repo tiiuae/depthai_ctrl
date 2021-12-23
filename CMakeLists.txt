@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # all these settings are needed to properly compile depthai-core as subdirectory
-set(BUILD_SHARED_LIBS OFF)
+set(BUILD_SHARED_LIBS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
 add_definitions(-DSPDLOG_HEADER_ONLY=1)
@@ -34,20 +34,61 @@ endif()
 #find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(camera_info_manager REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(vision_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 find_package(nlohmann_json REQUIRED)
+find_package(vision_opencv REQUIRED)
+
+find_package(cv_bridge REQUIRED)
+
+set(_opencv_version 4)
+find_package(OpenCV 4 QUIET COMPONENTS imgproc highgui)
+if(NOT OpenCV_FOUND)
+  message(STATUS "----------------Did not find OpenCV 4, trying OpenCV 3--------------")
+  set(_opencv_version 3)
+  find_package(OpenCV 3 REQUIRED COMPONENTS imgproc highgui)
+endif()
+
 
 include_directories(SYSTEM ${GST_INCLUDE_DIRS})
 include_directories(include)
 link_directories(${GST_LIBRARY_DIRS})
 
+
+
+set(camera_dependencies
+rclcpp
+sensor_msgs
+geometry_msgs
+std_msgs
+vision_msgs
+camera_info_manager
+cv_bridge
+vision_opencv
+image_transport
+)
+
+FILE(GLOB LIB_SRC
+"src/ImageConverter.cpp"
+"src/ImgDetectionConverter.cpp"
+"src/ImuConverter.cpp"
+)
+
+add_library(depthai_bridge SHARED ${LIB_SRC})
+ament_target_dependencies(depthai_bridge PUBLIC ${camera_dependencies})
+target_link_libraries(depthai_bridge PUBLIC depthai-core opencv_imgproc opencv_highgui)
+
+
 # DepthAI Camera as Component library
 add_library(depthai_camera SHARED src/depthai_camera.cpp)
-ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs)
-target_link_libraries(depthai_camera PUBLIC depthai-core)
+ament_target_dependencies(depthai_camera PUBLIC ${camera_dependencies})
+target_link_libraries(depthai_camera PUBLIC depthai-core opencv_imgproc opencv_highgui depthai_bridge)
 
 
 # DepthAI Camera as separate node
@@ -107,7 +148,7 @@ if (BUILD_TESTING)
   add_test(depthai_gstreamer_test depthai_gstreamer_test)
 endif (BUILD_TESTING)
 
-install(TARGETS depthai_camera depthai_gstreamer gstreamer_interface
+install(TARGETS depthai_camera depthai_gstreamer gstreamer_interface depthai_bridge depthai-core
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)
@@ -117,7 +158,7 @@ install(TARGETS
         DESTINATION lib/${PROJECT_NAME})
 
 
-install(DIRECTORY launch
+install(DIRECTORY launch params urdf
         DESTINATION share/${PROJECT_NAME}
         )
 

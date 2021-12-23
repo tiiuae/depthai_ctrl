@@ -17,7 +17,7 @@
 
 /* Authors(Unikie Oy): Mehmet Killioglu, Manuel Segarra-Abad, Sergey */
 
-#include <gstreamer_interface.hpp>
+#include <depthai_ctrl/gstreamer_interface.hpp>
 
 namespace depthai_ctrl
 {

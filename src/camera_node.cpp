@@ -17,7 +17,7 @@
 
 /* Authors(Unikie Oy): Mehmet Killioglu, Manuel Segarra-Abad, Sergey */
 
-#include "depthai_camera.h"
+#include "depthai_ctrl/depthai_camera.hpp"
 #include <rclcpp/rclcpp.hpp>
 
 using namespace depthai_ctrl;

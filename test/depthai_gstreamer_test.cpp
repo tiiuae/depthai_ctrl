@@ -17,7 +17,7 @@
 
 /* Authors(Unikie Oy): Mehmet Killioglu, Manuel Segarra-Abad, Sergey */
 
-#include "depthai_gstreamer.h"
+#include "depthai_ctrl/depthai_gstreamer.h"
 #include "gtest/gtest.h"
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
