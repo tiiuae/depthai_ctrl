@@ -43,17 +43,21 @@ void DepthAICamera::Initialize()
   declare_parameter<int>("height", 720);
   declare_parameter<int>("fps", 25);
   declare_parameter<int>("bitrate", 3000000);
+  declare_parameter<int>("lens_position", 120);
   declare_parameter<bool>("use_mono_cams", false);
   declare_parameter<bool>("use_raw_color_cam", false);
+  declare_parameter<bool>("use_auto_focus", false);
   declare_parameter<bool>("use_usb_three", false);
 
   _videoWidth = get_parameter("width").as_int();
   _videoHeight = get_parameter("height").as_int();
   _videoFps = get_parameter("fps").as_int();
   _videoBitrate = get_parameter("bitrate").as_int();
+  _videoLensPosition = get_parameter("lens_position").as_int();
   _videoH265 = (get_parameter("encoding").as_string() == "H265");
   _useMonoCams = get_parameter("use_mono_cams").as_bool();
   _useRawColorCam = get_parameter("use_raw_color_cam").as_bool();
+  _useAutoFocus = get_parameter("use_auto_focus").as_bool();
 
   // USB2 can only handle one H264 stream from camera. Adding raw camera or mono cameras will
   // cause dropped messages and unstable latencies between frames. When using USB3, we can
@@ -82,10 +86,13 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
       int height = _videoHeight;
       int fps = _videoFps;
       int bitrate = _videoBitrate;
+
+      int videoLensPosition = _videoLensPosition;
       std::string encoding = _videoH265 ? "H265" : "H264";
       std::string error_message{};
-      bool useMonoCams = get_parameter("use_mono_cams").as_bool();
-      bool useRawColorCam = get_parameter("use_raw_color_cam").as_bool();
+      bool useMonoCams = _useMonoCams;
+      bool useRawColorCam = _useRawColorCam;
+      bool useAutoFocus = _useAutoFocus;
 
       if (!cmd["Width"].empty() && cmd["Width"].is_number_integer()) {
         nlohmann::from_json(cmd["Width"], width);
@@ -105,22 +112,64 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
       if (!cmd["UseMonoCams"].empty() && cmd["UseMonoCams"].is_string()) {
         nlohmann::from_json(cmd["UseMonoCams"], useMonoCams);
       }
+      if (!cmd["UseAutoFocus"].empty() && cmd["UseAutoFocus"].is_boolean()) {
+        nlohmann::from_json(cmd["UseAutoFocus"], useAutoFocus);
+      }
+      if (!cmd["LensPosition"].empty() && cmd["LensPosition"].is_number_integer()) {
+        nlohmann::from_json(cmd["LensPosition"], videoLensPosition);
+      }
 
       if (DepthAIUtils::ValidateCameraParameters(
-          width, height, fps, bitrate, encoding,
+          width, height, fps, bitrate, videoLensPosition, encoding,
           error_message))
       {
         _videoWidth = width;
         _videoHeight = height;
         _videoFps = fps;
         _videoBitrate = bitrate;
+        _videoLensPosition = videoLensPosition;
         _videoH265 = (encoding == "H265");
         _useMonoCams = useMonoCams;
         _useRawColorCam = useRawColorCam;
+        _useAutoFocus = useAutoFocus;
+
         TryRestarting();
       } else {
         RCLCPP_ERROR(this->get_logger(), error_message.c_str());
       }
+    }
+    if (command == "change_focus" && _thread_running) {
+      bool useAutoFocus = _useAutoFocus;
+      if (!cmd["UseAutoFocus"].empty() && cmd["UseAutoFocus"].is_boolean()) {
+        nlohmann::from_json(cmd["UseAutoFocus"], useAutoFocus);
+      }
+      if (_useAutoFocus != useAutoFocus) {
+        _useAutoFocus = useAutoFocus;
+        changeFocusMode(_useAutoFocus);
+        RCLCPP_INFO(this->get_logger(), "Change focus mode to %s",
+          _useAutoFocus ? "auto" : "manual");
+      }
+      if (useAutoFocus) {
+        RCLCPP_ERROR(this->get_logger(), "Cannot change focus while auto focus is enabled");
+      } else {
+        
+        int videoLensPosition = get_parameter("lens_position").as_int();
+        
+        if (!cmd["LensPosition"].empty() && cmd["LensPosition"].is_number_integer()) {
+          nlohmann::from_json(cmd["LensPosition"], videoLensPosition);
+          RCLCPP_INFO(this->get_logger(), "Received lens position cmd of %d", videoLensPosition);
+        }
+        if (videoLensPosition >= 0 || videoLensPosition <= 255) {
+          RCLCPP_INFO(this->get_logger(), "Changing focus to %d", videoLensPosition);
+          _videoLensPosition = videoLensPosition;
+          changeLensPosition(_videoLensPosition);
+        } else {
+          RCLCPP_ERROR(
+            this->get_logger(), "Required video stream 'lens_position' is incorrect.\
+            Valid range is 0-255");
+        }
+      }
+
     }
   }
 }
@@ -229,7 +278,12 @@ void DepthAICamera::TryRestarting()
   //_device->startPipeline();
   _colorCamInputQueue = _device->getInputQueue("colorCamCtrl");
   dai::CameraControl colorCamCtrl;
-  colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::CONTINUOUS_VIDEO);
+  if (_useAutoFocus) {
+    colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::CONTINUOUS_VIDEO);
+  } else {
+    colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::OFF);
+    colorCamCtrl.setManualFocus(_videoLensPosition);
+  }
 
   _colorCamInputQueue->send(colorCamCtrl);
 
@@ -265,6 +319,32 @@ void DepthAICamera::TryRestarting()
       &DepthAICamera::onVideoEncoderCallback, this,
       std::placeholders::_1));
 
+}
+
+void DepthAICamera::changeLensPosition(int lens_position)
+{
+  if (!_device) {
+    return;
+  }
+  dai::CameraControl colorCamCtrl;
+  colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::OFF);
+  colorCamCtrl.setManualFocus(lens_position);
+  _colorCamInputQueue->send(colorCamCtrl);
+}
+
+void DepthAICamera::changeFocusMode(bool use_auto_focus)
+{
+  if (!_device) {
+    return;
+  }
+  dai::CameraControl colorCamCtrl;
+  if (use_auto_focus) {
+    colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::CONTINUOUS_VIDEO);
+  } else {
+    colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::OFF);
+    colorCamCtrl.setManualFocus(_videoLensPosition);
+  }
+  _colorCamInputQueue->send(colorCamCtrl);
 }
 
 void DepthAICamera::onLeftCamCallback(
