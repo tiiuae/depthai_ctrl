@@ -36,12 +36,13 @@ public:
     _videoHeight(720),
     _videoFps(25),
     _videoBitrate(3000000),
-    _videoLensPosition(120),
+    _videoLensPosition(110),
     _videoH265(false),
     _useMonoCams(false),
     _useRawColorCam(false),
     _useAutoFocus(false),
     _useUSB3(false),
+    _firstFrameReceived(false),
     _thread_running(false),
     _left_camera_frame("left_camera_frame"),
     _right_camera_frame("right_camera_frame"),
@@ -61,12 +62,13 @@ public:
     _videoHeight(720),
     _videoFps(25),
     _videoBitrate(3000000),
-    _videoLensPosition(120),
+    _videoLensPosition(110),
     _videoH265(false),
     _useMonoCams(false),
     _useRawColorCam(false),
     _useAutoFocus(false),
     _useUSB3(false),
+    _firstFrameReceived(false),
     _thread_running(false),
     _left_camera_frame("left_camera_frame"),
     _right_camera_frame("right_camera_frame"),
@@ -100,6 +102,7 @@ public:
 
 private:
   void ProcessingThread();
+  void AutoFocusTimer();
   void changeLensPosition(int lens_position);
   void changeFocusMode(bool use_auto_focus);
   void onLeftCamCallback(const std::shared_ptr<dai::ADatatype> data);
@@ -128,12 +131,15 @@ private:
   bool _useRawColorCam;
   bool _useAutoFocus;
   bool _useUSB3;
+  bool _firstFrameReceived;
   rclcpp::Time _lastFrameTime;
 
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _left_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _right_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _color_publisher;
   std::shared_ptr<rclcpp::Publisher<CompressedImageMsg>> _video_publisher;
+
+  rclcpp::TimerBase::SharedPtr     _auto_focus_timer;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
 
   std::atomic<bool> _thread_running;

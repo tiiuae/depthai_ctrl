@@ -37,13 +37,18 @@ void DepthAICamera::Initialize()
     stream_control_topic, rclcpp::SystemDefaultsQoS(),
     std::bind(&DepthAICamera::VideoStreamCommand, this, _1));
 
+  _auto_focus_timer =
+    this->create_wall_timer(
+    std::chrono::duration<double>(10.0),
+    std::bind(&DepthAICamera::AutoFocusTimer, this));
+
   // Video Stream parameters
   declare_parameter<std::string>("encoding", "H264");
   declare_parameter<int>("width", 1280);
   declare_parameter<int>("height", 720);
   declare_parameter<int>("fps", 25);
   declare_parameter<int>("bitrate", 3000000);
-  declare_parameter<int>("lens_position", 120);
+  declare_parameter<int>("lens_position", 110);
   declare_parameter<bool>("use_mono_cams", false);
   declare_parameter<bool>("use_raw_color_cam", false);
   declare_parameter<bool>("use_auto_focus", false);
@@ -58,14 +63,28 @@ void DepthAICamera::Initialize()
   _useMonoCams = get_parameter("use_mono_cams").as_bool();
   _useRawColorCam = get_parameter("use_raw_color_cam").as_bool();
   _useAutoFocus = get_parameter("use_auto_focus").as_bool();
-
   // USB2 can only handle one H264 stream from camera. Adding raw camera or mono cameras will
   // cause dropped messages and unstable latencies between frames. When using USB3, we can
   // support multiple streams without any bandwidth issues.
   _useUSB3 = get_parameter("use_usb_three").as_bool();
-  _lastFrameTime = get_clock()->now();
+  _lastFrameTime = rclcpp::Time(0);
 }
 
+void DepthAICamera::AutoFocusTimer()
+{
+  if (_firstFrameReceived) {
+    RCLCPP_INFO(
+      get_logger(), "[%s]: Change focus mode to %s",
+           get_name(), _useAutoFocus ? "auto" : "manual");
+    if (!_useAutoFocus){
+      RCLCPP_INFO(
+        get_logger(), "[%s]: Manual focus lens position %d",
+            get_name(), _videoLensPosition);
+    }
+    changeFocusMode(_useAutoFocus);
+    _auto_focus_timer->cancel();
+  }
+}
 
 void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
 {
@@ -146,15 +165,16 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
       if (_useAutoFocus != useAutoFocus) {
         _useAutoFocus = useAutoFocus;
         changeFocusMode(_useAutoFocus);
-        RCLCPP_INFO(this->get_logger(), "Change focus mode to %s",
+        RCLCPP_INFO(
+          this->get_logger(), "Change focus mode to %s",
           _useAutoFocus ? "auto" : "manual");
       }
       if (useAutoFocus) {
         RCLCPP_ERROR(this->get_logger(), "Cannot change focus while auto focus is enabled");
       } else {
-        
+
         int videoLensPosition = get_parameter("lens_position").as_int();
-        
+
         if (!cmd["LensPosition"].empty() && cmd["LensPosition"].is_number_integer()) {
           nlohmann::from_json(cmd["LensPosition"], videoLensPosition);
           RCLCPP_INFO(this->get_logger(), "Received lens position cmd of %d", videoLensPosition);
@@ -432,6 +452,12 @@ void DepthAICamera::onVideoEncoderCallback(
     video_stream_chunk.data.swap(videoPtr->getData());
     video_stream_chunk.format = _videoH265 ? "H265" : "H264";
     _video_publisher->publish(video_stream_chunk);
+    if (!_firstFrameReceived) {
+      _firstFrameReceived = true;
+      RCLCPP_INFO(
+        this->get_logger(), "[%s]: First frame received!",
+        get_name());
+    }
   }
 }
 
