@@ -48,7 +48,7 @@ void DepthAICamera::Initialize()
   declare_parameter<int>("height", 720);
   declare_parameter<int>("fps", 25);
   declare_parameter<int>("bitrate", 3000000);
-  declare_parameter<int>("lens_position", 120);
+  declare_parameter<int>("lens_position", 110);
   declare_parameter<bool>("use_mono_cams", false);
   declare_parameter<bool>("use_raw_color_cam", false);
   declare_parameter<bool>("use_auto_focus", false);
@@ -74,8 +74,13 @@ void DepthAICamera::AutoFocusTimer()
 {
   if (_firstFrameReceived) {
     RCLCPP_INFO(
-      get_logger(), "[%s]: Auto focus timer fired. First frame received. Setting auto focus",
-      get_name());
+      get_logger(), "[%s]: Change focus mode to %s",
+           get_name(), _useAutoFocus ? "auto" : "manual");
+    if (!_useAutoFocus){
+      RCLCPP_INFO(
+        get_logger(), "[%s]: Manual focus lens position %d",
+            get_name(), _videoLensPosition);
+    }
     changeFocusMode(_useAutoFocus);
     _auto_focus_timer->cancel();
   }
