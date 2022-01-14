@@ -67,14 +67,6 @@ jobs:
                      --module ros-${{ matrix.ros2_distro }}-depthai-ctrl \
                      "$pkg" \
                      "$ARTIFACTORY_REPO"
-          pkg=$(find bin -name 'depthai-ctrl-host*.deb')
-          jfrog rt u --deb "$DISTRIBUTION/$COMPONENT/$ARCHITECTURE" \
-                     --target-props COMMIT="$GITHUB_SHA" \
-                     --build-name "$BUILD_NAME" \
-                     --build-number "$GITHUB_SHA" \
-                     --module depthai-ctrl-host \
-                     "$pkg" \
-                     "$ARTIFACTORY_REPO"
           jfrog rt build-publish "$BUILD_NAME" "$GITHUB_SHA"
           jfrog rt bpr "$BUILD_NAME" "$GITHUB_SHA" "$ARTIFACTORY_REPO" \
                        --status dev \
