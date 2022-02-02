@@ -21,7 +21,7 @@ Debian packages are generated into fog_sw/packaging folder
 ## start application for development
 ```
 $ cd build
-$ source /opt/ros/foxy/setup.bash
+$ source /opt/ros/galactic/setup.bash
 $ export DRONE_DEVICE_ID=tredrone
 $ ./depthai_ctrl --ros-args --remap __ns:=/${DRONE_DEVICE_ID}
 ```
@@ -30,7 +30,7 @@ NOTE: the DRONE_DEVICE_ID environment variable does not need to be set if it is 
 ## start streaming video for development
 The node starts automatically during the boot. If the flag is set to false, start command needs to be given to create pipeline and start RTSP stream. Execute command in another shell session. <br>
 ```
-$ source /opt/ros/foxy/setup.bash
+$ source /opt/ros/galactic/setup.bash
 $ ros2 topic pub -t 1 /${DRONE_DEVICE_ID}/videostreamcmd std_msgs/msg/String "data: '{ \"Command\": \"start\" }'"
 ```
 The videonode is listening to the subscriber "/${DRONE_DEVICE_ID}/videostreamcmd".
@@ -38,13 +38,13 @@ The videonode is listening to the subscriber "/${DRONE_DEVICE_ID}/videostreamcmd
 ## list node parameters
 Execute command in another shell session or a session where ROS2 environment is available. <br>
 ```
-$ source /opt/ros/foxy/setup.bash
+$ source /opt/ros/galactic/setup.bash
 $ ros2 param list
 ```
 
 ## start appication setting parameters
 ```
-$ source /opt/ros/foxy/setup.bash
+$ source /opt/ros/galactic/setup.bash
 $ export DRONE_DEVICE_ID=tredrone
 $ ./depthai_ctrl --ros-args --remap __ns:=/${DRONE_DEVICE_ID} -p start_stream_on_boot:=true -p encoding:=H265
 ```
