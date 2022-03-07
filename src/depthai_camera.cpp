@@ -19,7 +19,7 @@ void DepthAICamera::Initialize()
   declare_parameter<std::string>("right_camera_topic", "camera/right/image_raw");
   declare_parameter<std::string>("color_camera_topic", "camera/color/image_raw");
   declare_parameter<std::string>("video_stream_topic", "camera/color/video");
-  declare_parameter<std::string>("stream_control_topic", "videostreamcmd");
+  declare_parameter<std::string>("stream_control_topic", "camera/videostreamcmd");
 
   const std::string left_camera_topic = get_parameter("left_camera_topic").as_string();
   const std::string right_camera_topic = get_parameter("right_camera_topic").as_string();
@@ -190,6 +190,14 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
         }
       }
 
+    }
+    if (command == "stop") {
+      if (!_thread_running) {
+        RCLCPP_ERROR(this->get_logger(), "The video stream is not running");
+        return;
+      } 
+      RCLCPP_INFO(this->get_logger(), "Stopping video stream");
+      Stop();
     }
   }
 }

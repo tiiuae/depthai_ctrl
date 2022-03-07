@@ -93,8 +93,10 @@ public:
   void Stop()
   {
     // TODO, maybe remove callbacks?
-    if (bool(_device)) {
-      _device->close();
+    if (_thread_running && bool(_device))
+    {
+      _thread_running = false;
+      _device.reset();
     }
   }
 
