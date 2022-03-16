@@ -68,7 +68,7 @@ void DepthAIGStreamer::Initialize()
     std::bind(&DepthAIGStreamer::GrabVideoMsg, this, std::placeholders::_1), video_sub_opt);
 
   _stream_command_subscriber = this->create_subscription<std_msgs::msg::String>(
-    "videostreamcmd",
+    "gstreamer/videostreamcmd",
     rclcpp::SystemDefaultsQoS(),
     std::bind(&DepthAIGStreamer::VideoStreamCommand, this, std::placeholders::_1), cmd_sub_opt);
 
