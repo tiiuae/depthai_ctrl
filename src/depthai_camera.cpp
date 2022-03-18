@@ -152,6 +152,11 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
         _useRawColorCam = useRawColorCam;
         _useAutoFocus = useAutoFocus;
 
+        _auto_focus_timer->reset();
+        _auto_focus_timer =
+          this->create_wall_timer(
+          std::chrono::duration<double>(10.0),
+          std::bind(&DepthAICamera::AutoFocusTimer, this));
         TryRestarting();
       } else {
         RCLCPP_ERROR(this->get_logger(), error_message.c_str());
@@ -197,6 +202,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
         return;
       } 
       RCLCPP_INFO(this->get_logger(), "Stopping video stream");
+      _firstFrameReceived = false;
       Stop();
     }
   }
