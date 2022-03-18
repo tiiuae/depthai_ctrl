@@ -34,7 +34,7 @@ void DepthAICamera::Initialize()
     video_stream_topic,
     rclcpp::SystemDefaultsQoS());
   _stream_command_subscriber = create_subscription<std_msgs::msg::String>(
-    stream_control_topic, rclcpp::SystemDefaultsQoS(),
+    stream_control_topic, rclcpp::QoS(10).reliable(),
     std::bind(&DepthAICamera::VideoStreamCommand, this, _1));
 
   _auto_focus_timer =
