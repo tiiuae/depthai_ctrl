@@ -2,14 +2,7 @@
 #define FOG_SW_DEPTHAI_CAMERA_H
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
-#include <depthai/device/Device.hpp>
-#include <depthai/pipeline/datatype/ImgFrame.hpp>
-#include <depthai/pipeline/node/ColorCamera.hpp>
-#include <depthai/pipeline/node/MonoCamera.hpp>
-#include <depthai/pipeline/node/VideoEncoder.hpp>
-#include <depthai/pipeline/node/XLinkIn.hpp>
-#include <depthai/pipeline/node/XLinkOut.hpp>
-#include <depthai/utility/Initialization.hpp>
+#include <depthai/depthai.hpp>
 //restore compiler switches
 #pragma GCC diagnostic pop
 #include <rclcpp/rclcpp.hpp>
