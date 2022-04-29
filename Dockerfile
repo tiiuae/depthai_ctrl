@@ -27,7 +27,7 @@ RUN /packaging/build.sh
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:DP-2258-common-docker-base-image-s
+FROM ghcr.io/tiiuae/fog-ros-baseimage:stable
 
 ENTRYPOINT [ "/entrypoint.sh" ]
 
