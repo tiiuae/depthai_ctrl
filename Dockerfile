@@ -20,8 +20,7 @@ COPY . /main_ws/src/
 
 # this:
 # 1) builds the application
-# 2) packages the application as .deb
-# 3) writes the .deb packages to /main_ws/
+# 2) packages the application as .deb in /main_ws/
 RUN /packaging/build.sh
 
 #  ▲               runtime ──┐
@@ -33,7 +32,7 @@ ENTRYPOINT [ "/entrypoint.sh" ]
 
 COPY entrypoint.sh /entrypoint.sh
 
-COPY --from=builder /main_ws/src/build_output/ros-*-depthai-ctrl_*_amd64.deb /depthai.deb
+COPY --from=builder /main_ws/ros-*-depthai-ctrl_*_amd64.deb /depthai.deb
 # need update because ROS people have a habit of removing old packages pretty fast
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libusb-1.0-0-dev \
