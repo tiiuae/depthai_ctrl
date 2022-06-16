@@ -9,7 +9,7 @@
   <maintainer email="sergey.smirnov@unikie.com">Sergey Smirnov</maintainer>
   <maintainer email="mehmet.killioglu@unikie.com">Mehmet Killioglu</maintainer>
   
-  <license>TODO: License declaration</license>
+  <license>Apache 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
