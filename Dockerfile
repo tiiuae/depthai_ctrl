@@ -30,7 +30,8 @@ FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-3dcb78d
 
 ENTRYPOINT [ "/entrypoint.sh" ]
 
-COPY entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh entrypoint_simulation.sh /
+COPY publish-diagnostics*.sh /
 
 COPY --from=builder /main_ws/ros-*-depthai-ctrl_*_amd64.deb /depthai.deb
 # need update because ROS people have a habit of removing old packages pretty fast
