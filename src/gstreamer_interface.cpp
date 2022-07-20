@@ -199,9 +199,14 @@ void GstInterface::BuildDefaultPipeline()
   } else {
     // RTSP client sink
     _rtspSink = gst_element_factory_make("rtspclientsink", "rtsp_sink");
+      int protocols = 1;
+      if (_streamAddress.find("rtsps://") == 0)
+      {
+        protocols = 4;
+      }
     g_object_set(
       G_OBJECT(_rtspSink),
-      "protocols", 4,               // 4 = tcp
+      "protocols", protocols,               // 4 = tcp, 1 = udp
       "tls-validation-flags", 0,
       "location", _streamAddress.c_str(),
       NULL);
@@ -311,9 +316,14 @@ void GstInterface::BuildPipeline()
     } else {
       // RTSP client sink
       _rtspSink = gst_element_factory_make("rtspclientsink", "rtsp_sink");
+      int protocols = 1;
+      if (_streamAddress.find("rtsps://") == 0)
+      {
+        protocols = 4;
+      }
       g_object_set(
         G_OBJECT(_rtspSink),
-        "protocols", 4,             // 4 = tcp
+        "protocols", protocols,             // 4 = tcp, 1 = udp
         "tls-validation-flags", 0,
         "latency", 500,
         "rtx-time", 0,

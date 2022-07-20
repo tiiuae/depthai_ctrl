@@ -187,9 +187,14 @@ public:
   {
     _streamAddress = address;
     if (_rtspSink) {
+      int protocols = 1;
+      if (_streamAddress.find("rtsps://") == 0)
+      {
+        protocols = 4;
+      }
       g_object_set(
         G_OBJECT(_rtspSink),
-        "protocols", 4,                 // 4 = tcp
+        "protocols", protocols,                 // 4 = tcp, 1 = udp
         "location", _streamAddress.c_str(),
         NULL);
     }
