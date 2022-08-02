@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # all these settings are needed to properly compile depthai-core as subdirectory
-set(BUILD_SHARED_LIBS OFF)
+set(BUILD_SHARED_LIBS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
 add_definitions(-DSPDLOG_HEADER_ONLY=1)
@@ -35,6 +35,7 @@ endif()
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(diagnostic_updater REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
@@ -63,7 +64,7 @@ target_link_libraries(gstreamer_interface PUBLIC ${GST_LIBRARIES} gstapp-1.0)
 
 # DepthAI GStreamer as Component library
 add_library(depthai_gstreamer SHARED src/depthai_gstreamer.cpp)
-ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs)
+ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs diagnostic_updater)
 target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0 gstreamer_interface)
 
 # DepthAI GStreamer as separate node

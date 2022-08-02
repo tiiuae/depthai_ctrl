@@ -97,7 +97,7 @@ void GstInterface::StopStream(void)
     //gst_object_unref(GST_OBJECT(_appSource));
     _pipeline = nullptr;
     _appSource = nullptr;
-    
+
   }
   std::cout << "Unreferencing bus element!" << std::endl;
   if (_bus != nullptr) {

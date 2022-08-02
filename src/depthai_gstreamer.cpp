@@ -100,6 +100,13 @@ void DepthAIGStreamer::Initialize()
   declare_parameter<int>("fps", 25);
   declare_parameter<int>("bitrate", 3000000);
 
+  double diagnostics_frequency = declare_parameter("diagnostics_frequency", 1.0);
+  _updater = std::make_shared<diagnostic_updater::Updater>(
+    create_sub_node("diagnostic_updater"), 1.0 / diagnostics_frequency);
+  _updater->setHardwareID("depthai_gstreamer");
+
+  _updater->add("gstreamer", [this](auto & t) { HandleStreamDiagnostics(t); });
+
   rcl_interfaces::msg::ParameterDescriptor encoding_desc;
   encoding_desc.name = "encoding";
   encoding_desc.type = rclcpp::PARAMETER_STRING;
@@ -171,6 +178,22 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
   g_mutex_unlock(&_impl->haveDataCondMutex);
 }
 
+void DepthAIGStreamer::HandleStreamDiagnostics(diagnostic_updater::DiagnosticStatusWrapper & status)
+{
+  status.clearSummary();
+  status.add("info/encoder_bitrate", _impl->GetEncoderBitrate());
+  status.add("info/encoder_fps", _impl->GetEncoderFps());
+  status.add("info/encoder_profile", _impl->GetEncoderProfile());
+  status.add("info/encoder_width", _impl->GetEncoderWidth());
+  status.add("info/streaming_source", _impl->IsStreamDefault() ? "default" : "camera");
+  status.add("info/streaming_status", _impl->IsStreamPlaying() ? "playing" : "stopped");
+  status.summary(_impl->IsStreamPlaying() ? DiagStatus::OK : DiagStatus::WARN, 
+    std::string("Stream is ").append(_impl->IsStreamPlaying() ? "playing" : "stopped"));
+  status.add("gauge/streaming_bitrate", _impl->GetStreamBitrate());
+  status.add("gauge/streaming_min_bitrate", _impl->GetStreamMinBitrate());
+  status.add("gauge/streaming_max_bitrate", _impl->GetStreamMaxBitrate());
+  status.add("gauge/streaming_nominal_bitrate", _impl->GetStreamNominalBitrate());
+}
 
 void DepthAIGStreamer::HandleStreamStatus()
 {

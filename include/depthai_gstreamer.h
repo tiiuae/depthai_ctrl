@@ -24,6 +24,7 @@
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <gstreamer_interface.hpp>
+#include <diagnostic_updater/diagnostic_updater.hpp>
 
 namespace depthai_ctrl
 {
@@ -33,6 +34,7 @@ class DepthAIGStreamer : public rclcpp::Node
 {
   public:
     using CompressedImageMsg = sensor_msgs::msg::CompressedImage;
+    using DiagStatus = diagnostic_msgs::msg::DiagnosticStatus;
 
     DepthAIGStreamer(int argc, char* argv[]);
     DepthAIGStreamer(const rclcpp::NodeOptions & options);
@@ -51,12 +53,13 @@ class DepthAIGStreamer : public rclcpp::Node
     rclcpp::CallbackGroup::SharedPtr _callback_group_timer;
     rclcpp::CallbackGroup::SharedPtr _callback_group_video_subscriber;
     rclcpp::CallbackGroup::SharedPtr _callback_group_cmd_subscriber;
-
+    std::shared_ptr<diagnostic_updater::Updater> _updater;
     bool _is_stop_requested;
     
     void Initialize();
     void GrabVideoMsg(CompressedImageMsg::SharedPtr video_msg);
     void HandleStreamStatus();
+    void HandleStreamDiagnostics(diagnostic_updater::DiagnosticStatusWrapper & status);
     void VideoStreamCommand(const std_msgs::msg::String::SharedPtr msg);
 
 };

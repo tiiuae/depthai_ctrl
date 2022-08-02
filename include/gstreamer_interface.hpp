@@ -123,6 +123,14 @@ public:
     _encoderHeight = height;
   }
 
+  //! @brief Return stream bitrate info
+  //! @return stream bitrate
+  //!
+  uint GetStreamBitrate() {return _stats_encoder_bitrate;}
+  uint GetStreamMinBitrate() {return _stats_encoder_min_bitrate;}
+  uint GetStreamMaxBitrate() {return _stats_encoder_max_bitrate;}
+  uint GetStreamNominalBitrate() {return _stats_encoder_nominal_bitrate;}
+
   //! @brief Return encoder height
   //! @return encoder height
   //!
@@ -381,6 +389,11 @@ protected:
         gst_message_parse_tag(message, &list);
 
         g_print("Tag: %s.\n", gst_tag_list_to_string(list));
+        
+        gst_tag_list_get_uint_index(list, GST_TAG_BITRATE, 0, &depthAIGst->_stats_encoder_bitrate);
+        gst_tag_list_get_uint_index(list, GST_TAG_MINIMUM_BITRATE, 0, &depthAIGst->_stats_encoder_min_bitrate);
+        gst_tag_list_get_uint_index(list, GST_TAG_MAXIMUM_BITRATE, 0, &depthAIGst->_stats_encoder_max_bitrate);
+        gst_tag_list_get_uint_index(list, GST_TAG_NOMINAL_BITRATE, 0, &depthAIGst->_stats_encoder_nominal_bitrate);
         gst_tag_list_unref(list);
         break;
 
@@ -479,11 +492,14 @@ private:
   GstClockTime _gstStartTimestamp;
   //! @brief Last frame's timestamp is recorded, and used for frame duration in buffer
   GstClockTime _gstTimestamp;
-
   int _encoderWidth;
   int _encoderHeight;
   int _encoderFps;
   int _encoderBitrate;
+  uint _stats_encoder_max_bitrate;
+  uint _stats_encoder_min_bitrate;
+  uint _stats_encoder_nominal_bitrate;
+  uint _stats_encoder_bitrate;
 };
 } // namespace depthai_ctrl
 #endif //FOG_SW_DEPTHAI_GSTREAMER_INTERFACE_H
