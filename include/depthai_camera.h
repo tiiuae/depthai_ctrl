@@ -30,6 +30,10 @@
 #include <std_msgs/msg/string.hpp>
 #include <iostream>
 
+#include <prometheus/counter.h>
+#include <prometheus/exposer.h>
+#include <prometheus/registry.h>
+
 namespace depthai_ctrl
 {
 
@@ -55,6 +59,8 @@ public:
     _useAutoFocus(false),
     _useUSB3(false),
     _firstFrameReceived(false),
+    _metricsExposer{"127.0.0.1:8080"},
+    _metricsRegistry(std::make_shared<prometheus::Registry>()),
     _thread_running(false),
     _left_camera_frame("left_camera_frame"),
     _right_camera_frame("right_camera_frame"),
@@ -64,6 +70,7 @@ public:
     _colorCamCallback(0),
     _videoEncoderCallback(0)
   {
+  	initMetrics();
     Initialize();
     TryRestarting();
   }
@@ -81,6 +88,8 @@ public:
     _useAutoFocus(false),
     _useUSB3(false),
     _firstFrameReceived(false),
+    _metricsExposer{"127.0.0.1:8080"},
+    _metricsRegistry(std::make_shared<prometheus::Registry>()),
     _thread_running(false),
     _left_camera_frame("left_camera_frame"),
     _right_camera_frame("right_camera_frame"),
@@ -90,7 +99,7 @@ public:
     _colorCamCallback(0),
     _videoEncoderCallback(0)
   {
-
+  	initMetrics();
     Initialize();
     TryRestarting();
   }
@@ -115,6 +124,17 @@ public:
   void TryRestarting();
 
 private:
+	void initMetrics()
+	{
+		// ask the exposer to scrape the registry on incoming HTTP requests
+		_metricsExposer.RegisterCollectable(_metricsRegistry);
+
+		_framesReceivedCounter = &(prometheus::BuildCounter()
+					.Name("frames_received_count")
+					.Help("Number of video frames received from DepthAI camera")
+					.Register(*_metricsRegistry).Add({{"direction", "inbound"}}));
+	}
+
   void ProcessingThread();
   void AutoFocusTimer();
   void changeLensPosition(int lens_position);
@@ -146,6 +166,9 @@ private:
   bool _useAutoFocus;
   bool _useUSB3;
   bool _firstFrameReceived;
+  prometheus::Exposer _metricsExposer;
+  std::shared_ptr<prometheus::Registry> _metricsRegistry;
+  prometheus::Counter* _framesReceivedCounter;
   rclcpp::Time _lastFrameTime;
 
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _left_publisher;

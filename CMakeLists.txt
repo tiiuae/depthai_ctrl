@@ -39,6 +39,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 find_package(nlohmann_json REQUIRED)
+find_package(prometheus-cpp CONFIG REQUIRED)
 
 include_directories(SYSTEM ${GST_INCLUDE_DIRS})
 include_directories(include)
@@ -48,12 +49,14 @@ link_directories(${GST_LIBRARY_DIRS})
 add_library(depthai_camera SHARED src/depthai_camera.cpp)
 ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs)
 target_link_libraries(depthai_camera PUBLIC depthai-core)
+target_link_libraries(depthai_camera PRIVATE prometheus-cpp::pull)
 
 
 # DepthAI Camera as separate node
 add_executable(camera_node src/camera_node.cpp)
 ament_target_dependencies(camera_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(camera_node PUBLIC depthai_camera)
+target_link_libraries(camera_node PRIVATE prometheus-cpp::pull)
 
 
 # DepthAI GStreamer as Component library
@@ -75,6 +78,7 @@ target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
 add_executable(depthai_ctrl src/depthai_ctrl.cpp)
 ament_target_dependencies(depthai_ctrl PUBLIC rclcpp rclcpp_components)
 target_link_libraries(depthai_ctrl PUBLIC depthai_camera depthai_gstreamer)
+target_link_libraries(depthai_ctrl PRIVATE prometheus-cpp::pull)
 
 # Explicitly force to re-compile binary whenever library changed
 add_dependencies(camera_node depthai_camera)
@@ -97,7 +101,7 @@ if (BUILD_TESTING)
   ament_target_dependencies(depthai_camera_test rclcpp rclcpp_components)
   ament_target_dependencies(depthai_gstreamer_test PUBLIC rclcpp rclcpp_components)
 
-  target_link_libraries(depthai_camera_test depthai_camera gtest pthread)
+  target_link_libraries(depthai_camera_test depthai_camera gtest pthread prometheus-cpp::pull)
   target_link_libraries(depthai_gstreamer_test PUBLIC depthai_gstreamer gstreamer_interface ${GST_LIBRARIES} gstapp-1.0 gstrtspserver-1.0 gtest pthread)
 
   add_dependencies(depthai_camera_test depthai_camera)

@@ -403,6 +403,8 @@ void DepthAICamera::changeFocusMode(bool use_auto_focus)
 void DepthAICamera::onLeftCamCallback(
   const std::shared_ptr<dai::ADatatype> data)
 {
+	_framesReceivedCounter->Increment();
+
   (void)data; // Using this pointer does not pop from queue, so we don't need to do anything with it.
   std::vector<std::shared_ptr<dai::ImgFrame>> leftPtrVector =
     _leftQueue->tryGetAll<dai::ImgFrame>();
@@ -419,6 +421,8 @@ void DepthAICamera::onLeftCamCallback(
 void DepthAICamera::onRightCallback(
   const std::shared_ptr<dai::ADatatype> data)
 {
+	_framesReceivedCounter->Increment();
+
   (void)data;
   std::vector<std::shared_ptr<dai::ImgFrame>> rightPtrVector =
     _rightQueue->tryGetAll<dai::ImgFrame>();
