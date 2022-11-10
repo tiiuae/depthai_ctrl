@@ -18,7 +18,8 @@ _term() {
     fi
     kill -s SIGINT $pid
 }
-trap _term SIGTERM
+# Use SIGTERM or TERM, does not seem to make any difference.
+trap _term TERM
 
 mode="${1}"
 if [ "${mode}" = "gstreamer" ]; then
@@ -32,10 +33,15 @@ else
         --remap __ns:=/$DRONE_DEVICE_ID \
         -p address:=$RTSP_SERVER_ADDRESS/$DRONE_DEVICE_ID &
 fi
-
 child=$!
 
 echo "Waiting for pid $child"
+# Calling "wait" will then wait for the job with the specified by $child to finish, or for any signals to be fired.
+# Due to "or for any signals to be fired", "wait" will also handle SIGTERM and it will shutdown before
+# the node ends gracefully.
+# The solution is to add a second "wait" call and remove the trap between the two calls.
+wait $child
+trap - TERM
 wait $child
 RESULT=$?
 
