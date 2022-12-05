@@ -1,4 +1,4 @@
-FROM ghcr.io/tiiuae/fog-ros-baseimage:builder-3dcb78d AS builder
+FROM ghcr.io/tiiuae/fog-ros-baseimage:builder-7072ebc AS builder
 
 # TODO: not sure how many of these deps are actually needed for building. at least this:
 # libusb-1.0-0-dev
@@ -26,7 +26,7 @@ RUN /packaging/build.sh
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-3dcb78d
+FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-7072ebc
 
 ENTRYPOINT [ "/entrypoint.sh" ]
 
