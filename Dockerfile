@@ -1,4 +1,4 @@
-FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v1.0.0 AS builder
+FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v2.0.0 AS builder
 
 # TODO: not sure how many of these deps are actually needed for building. at least this:
 # libusb-1.0-0-dev
