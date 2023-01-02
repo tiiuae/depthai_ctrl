@@ -26,7 +26,7 @@ RUN /packaging/build.sh
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:v1.0.0
+FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.0.0
 
 ENTRYPOINT [ "/entrypoint.sh" ]
 
