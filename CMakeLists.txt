@@ -46,7 +46,7 @@ link_directories(${GST_LIBRARY_DIRS})
 
 # DepthAI Camera as Component library
 add_library(depthai_camera SHARED src/depthai_camera.cpp)
-ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs)
+ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs rclcpp_components)
 target_link_libraries(depthai_camera PUBLIC depthai-core)
 
 
@@ -63,7 +63,7 @@ target_link_libraries(gstreamer_interface PUBLIC ${GST_LIBRARIES} gstapp-1.0)
 
 # DepthAI GStreamer as Component library
 add_library(depthai_gstreamer SHARED src/depthai_gstreamer.cpp)
-ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs)
+ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs rclcpp_components)
 target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0 gstreamer_interface)
 
 # DepthAI GStreamer as separate node
