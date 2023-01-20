@@ -6,14 +6,15 @@ $(var my_node_ns)/camera_node:
     fps: 25
     height: 720
     lens_position: 120
-    nn_directory: tiny-yolo-v4_openvino_2021.2_6shave.blob
+    nn_directory: /home/mehmet/Downloads/tiny-yolo-v4_openvino_2021.2_6shave.blob
     use_auto_focus: true
-    use_mono_cams: true
-    use_neural_network: true
-    use_passthrough_preview: true
+    use_mono_cams: false
+    use_depth: false
+    use_neural_network: false
+    use_passthrough_preview: false
     use_raw_color_cam: true
     use_sim_time: false
-    use_usb_three: true
+    use_usb_three: false
     use_video_from_color_cam: true
     width: 1280
 

@@ -142,16 +142,17 @@ def generate_launch_description():
             emulate_tty=True,
             namespace=DRONE_DEVICE_ID,
             remappings=remappings,
-            parameters=[ParameterFile(parameters_file, allow_substs=True),
-                        {
-                            'use_mono_cams': use_mono_cams,
-                            'use_raw_color_cam': use_raw_color_cam,
-                            'use_video_from_color_cam': use_video_from_color_cam,
-                            'use_auto_focus': use_auto_focus,
-                            'use_usb_three': use_usb_three,
-                            'use_neural_network': use_neural_network,
-                            'use_passthrough_preview': use_passthrough_preview,
-                        }],
+            parameters=[ParameterFile(parameters_file, allow_substs=True)]
+            # parameters=[ParameterFile(parameters_file, allow_substs=True),
+            #             {
+            #                 'use_mono_cams': use_mono_cams,
+            #                 'use_raw_color_cam': use_raw_color_cam,
+            #                 'use_video_from_color_cam': use_video_from_color_cam,
+            #                 'use_auto_focus': use_auto_focus,
+            #                 'use_usb_three': use_usb_three,
+            #                 'use_neural_network': use_neural_network,
+            #                 'use_passthrough_preview': use_passthrough_preview,
+            #             }],
     )
 
     rsp_node = Node(

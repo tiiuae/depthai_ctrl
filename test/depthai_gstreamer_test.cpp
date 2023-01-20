@@ -302,7 +302,7 @@ TEST_F(DepthAIGStreamerTest, StartOnBoot_UDPTest)
   ASSERT_NO_THROW(gstreamer_node = std::make_shared<depthai_ctrl::DepthAIGStreamer>(options));
 
   std::this_thread::sleep_for(std::chrono::seconds(5));
-  
+
   EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
   // UDP transfer will start even if there is no server, so no error
   EXPECT_FALSE(gstreamer_node->IsErrorDetected());
@@ -329,7 +329,7 @@ TEST_F(DepthAIGStreamerTest, StartOnBoot_H265Test)
   EXPECT_EQ(1UL, video_publisher->get_subscription_count());
 
   std::this_thread::sleep_for(std::chrono::seconds(10));
-  
+
   EXPECT_TRUE(gstreamer_node->IsStreamPlaying());
   EXPECT_TRUE(gstreamer_node->IsErrorDetected());
   // we play "default" stream, as no real camera connected

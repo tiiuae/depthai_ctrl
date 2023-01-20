@@ -38,7 +38,7 @@ DepthAIGStreamer::DepthAIGStreamer(int argc, char * argv[])
 : Node("depthai_gstreamer"), _impl(nullptr)
 {
   _impl = new GstInterface(argc, argv);
-  
+
   Initialize();
 }
 
@@ -47,7 +47,7 @@ DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions & options)
 {
 
   _impl = new GstInterface(0, 0);
-  
+
   Initialize();
 }
 
@@ -80,13 +80,13 @@ void DepthAIGStreamer::Initialize()
 
   rclcpp::QoS qos_profile(10);
   _video_subscriber = create_subscription<CompressedImageMsg>(
-    "camera_node/color/video",
-    qos_profile,
+    "camera/color/video",
+    rclcpp::SystemDefaultsQoS(),
     std::bind(&DepthAIGStreamer::GrabVideoMsg, this, std::placeholders::_1), video_sub_opt);
 
   _stream_command_subscriber = this->create_subscription<std_msgs::msg::String>(
     "gstreamer/videostreamcmd",
-    qos_profile,
+    rclcpp::SystemDefaultsQoS(),
     std::bind(&DepthAIGStreamer::VideoStreamCommand, this, std::placeholders::_1), cmd_sub_opt);
 
   _handle_stream_status_timer = this->create_wall_timer(
@@ -156,7 +156,7 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
 
   RCLCPP_DEBUG(
     get_logger(),
-    "[GST %s]RECEIVED CHUNK # %d.%d", 
+    "[GST %s]RECEIVED CHUNK # %d.%d",
     _impl->IsStreamPlaying() ? "STREAMING" : "STOPPED", stamp.sec, stamp.nanosec);
 
   g_mutex_lock(&_impl->haveDataCondMutex);

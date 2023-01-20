@@ -92,3 +92,7 @@ The `getTimestamp()` is uses a host synced monotonic time source to provide capt
 On the other hand, `getTimestampDevice()` gives the OAKD device timestamp directly, which does not show the same behavior. At the moment, the video encoder uses this method since it already uses the first arrived message's timestamp to calculate relative time point of the stream. Even though it is not a problem for the video stream, this method cannot be used for color and stereo camera outputs. The clock difference between host and camera will create an issue when these images are used for real-time operations such as SLAM or object tracking. This needs to be investigated further more. 
 
 One possible fix for this is to delay start of the node by some 20-30 seconds. Since the time sync will already be done by that time, the messages can have correct monotonic timestamp. Not tested yet.
+
+## Open-source libraries used
+[luxonis/depthai-ros](https://github.com/luxonis/depthai-ros)
+[luxonis/depthai-core](https://github.com/luxonis/depthai-core)

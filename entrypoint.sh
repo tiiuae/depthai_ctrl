@@ -21,6 +21,10 @@ _term() {
 # Use SIGTERM or TERM, does not seem to make any difference.
 trap _term TERM
 
+if [[ ${DEPTHAI_PARAM_FILE+x} != "" ]]; then
+	ROS_FLAGS="params_file:=${DEPTHAI_PARAM_FILE} ${ROS_FLAGS}"
+fi
+
 mode="${1}"
 if [ "${mode}" = "gstreamer" ]; then
     ros-with-env ros2 run depthai_ctrl gstreamer_node \
@@ -28,10 +32,7 @@ if [ "${mode}" = "gstreamer" ]; then
         --remap __ns:=/$DRONE_DEVICE_ID \
         -p address:=$RTSP_SERVER_ADDRESS/$DRONE_DEVICE_ID &
 else
-    ros-with-env ros2 run depthai_ctrl camera_node \
-        --ros-args \
-        --remap __ns:=/$DRONE_DEVICE_ID \
-        -p address:=$RTSP_SERVER_ADDRESS/$DRONE_DEVICE_ID &
+    ros-with-env ros2 launch depthai_ctrl depthai_launch.py ${ROS_FLAGS}&
 fi
 child=$!
 

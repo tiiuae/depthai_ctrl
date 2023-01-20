@@ -354,14 +354,14 @@ protected:
           gst_element_state_get_name(old_state),
           gst_element_state_get_name(new_state));
         if (new_state == GST_STATE_PLAYING) {
-          if (g_strrstr(GST_OBJECT_NAME(message->src), "rtspbin"))
-          {
+          if (g_strrstr(GST_OBJECT_NAME(message->src), "rtspbin")) {
             depthAIGst->_isStreamPlaying = true;
             depthAIGst->_isErrorDetected = false;
           }
-          if ((depthAIGst->_streamAddress.find("udp://") == 0)){
-            if (g_strrstr(GST_OBJECT_NAME(message->src), "default_pipeline")||
-              g_strrstr(GST_OBJECT_NAME(message->src), "rgbCamSink_pipeline")){
+          if ((depthAIGst->_streamAddress.find("udp://") == 0)) {
+            if (g_strrstr(GST_OBJECT_NAME(message->src), "default_pipeline") ||
+              g_strrstr(GST_OBJECT_NAME(message->src), "rgbCamSink_pipeline"))
+            {
               depthAIGst->_isStreamPlaying = true;
               depthAIGst->_isErrorDetected = false;
             }

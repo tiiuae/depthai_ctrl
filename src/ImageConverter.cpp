@@ -29,23 +29,83 @@ std::unordered_map<dai::RawImgFrame::Type, std::string> ImageConverter::planarEn
   {dai::RawImgFrame::Type::YUV420p, "rgb8"}};
 
 ImageConverter::ImageConverter(bool interleaved)
-: _daiInterleaved(interleaved) {}
+: _daiInterleaved(interleaved), _steadyBaseTime(std::chrono::steady_clock::now())
+{
+  _rosBaseTime = rclcpp::Clock().now();
+}
 
 ImageConverter::ImageConverter(const std::string frameName, bool interleaved)
-: _frameName(frameName), _daiInterleaved(interleaved) {}
-
-void ImageConverter::toRosMsg(std::shared_ptr<dai::ImgFrame> inData, ImageMsgs::Image & outImageMsg)
+: _frameName(frameName), _daiInterleaved(interleaved), _steadyBaseTime(
+    std::chrono::steady_clock::now())
+{
+  _rosBaseTime = rclcpp::Clock().now();
+}
+void ImageConverter::toRosMsgFromBitStream(
+  std::shared_ptr<dai::ImgFrame> inData,
+  std::deque<ImageMsgs::Image> & outImageMsgs,
+  dai::RawImgFrame::Type type,
+  const sensor_msgs::msg::CameraInfo & info)
 {
   auto tstamp = inData->getTimestamp();
+  ImageMsgs::Image outImageMsg;
+  StdMsgs::Header header;
+  header.frame_id = _frameName;
+  header.stamp = getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
+  std::string encoding;
+  int decodeFlags;
+  cv::Mat output;
+  switch (type) {
+    case dai::RawImgFrame::Type::BGR888i: {
+        encoding = sensor_msgs::image_encodings::BGR8;
+        decodeFlags = cv::IMREAD_COLOR;
+        break;
+      }
+    case dai::RawImgFrame::Type::GRAY8: {
+        encoding = sensor_msgs::image_encodings::MONO8;
+        decodeFlags = cv::IMREAD_GRAYSCALE;
+        break;
+      }
+    case dai::RawImgFrame::Type::RAW8: {
+        encoding = sensor_msgs::image_encodings::TYPE_16UC1;
+        decodeFlags = cv::IMREAD_GRAYSCALE;
+        break;
+      }
+    default: {
+        throw(std::runtime_error("Converted type not supported!"));
+      }
+  }
 
+  output = cv::imdecode(cv::Mat(inData->getData()), decodeFlags);
+
+  // converting disparity
+  if (type == dai::RawImgFrame::Type::RAW8) {
+    auto factor = (info.k[0] * info.p[3]);
+    cv::Mat depthOut = cv::Mat(cv::Size(output.cols, output.rows), CV_16UC1);
+    depthOut.forEach<short>(
+      [&output, &factor](short & pixel, const int * position) -> void {
+        auto disp = output.at<int8_t>(position);
+        if (disp == 0) {
+          pixel = 0;
+        } else {
+          pixel = factor / disp;
+        }
+      });
+    output = depthOut.clone();
+  }
+  cv_bridge::CvImage(header, encoding, output).toImageMsg(outImageMsg);
+  outImageMsgs.push_back(outImageMsg);
+}
+
+void ImageConverter::toRosMsg(
+  std::shared_ptr<dai::ImgFrame> inData,
+  std::deque<ImageMsgs::Image> & outImageMsgs)
+{
+  auto tstamp = inData->getTimestamp();
+  ImageMsgs::Image outImageMsg;
   StdMsgs::Header header;
   header.frame_id = _frameName;
 
-  auto rclNow = rclcpp::Clock().now();
-  auto steadyTime = std::chrono::steady_clock::now();
-  auto diffTime = steadyTime - tstamp;
-  auto rclStamp = rclNow - diffTime;
-  header.stamp = rclStamp;
+  header.stamp = getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
 
   if (planarEncodingEnumMap.find(inData->getType()) != planarEncodingEnumMap.end()) {
     // cv::Mat inImg = inData->getCvFrame();
@@ -128,6 +188,7 @@ void ImageConverter::toRosMsg(std::shared_ptr<dai::ImgFrame> inData, ImageMsgs::
     // img->data.assign(packet.data->cbegin(), packet.data->cend());
     memcpy(imageMsgDataPtr, daiImgData, size);
   }
+  outImageMsgs.push_back(outImageMsg);
 }
 
 // TODO(sachin): Not tested
@@ -187,9 +248,11 @@ void ImageConverter::toDaiMsg(const ImageMsgs::Image & inMsg, dai::ImgFrame & ou
 
 ImagePtr ImageConverter::toRosMsgPtr(std::shared_ptr<dai::ImgFrame> inData)
 {
-  ImagePtr ptr = std::make_shared<ImageMsgs::Image>();
+  std::deque<ImageMsgs::Image> msgQueue;
+  toRosMsg(inData, msgQueue);
+  auto msg = msgQueue.front();
 
-  toRosMsg(inData, *ptr);
+  ImagePtr ptr = std::make_shared<ImageMsgs::Image>(msg);
   return ptr;
 }
 
@@ -262,7 +325,6 @@ cv::Mat ImageConverter::rosMsgtoCvMat(ImageMsgs::Image & inMsg)
     return rgb;
   }
 }
-
 ImageMsgs::CameraInfo ImageConverter::calibrationToCameraInfo(
   dai::CalibrationHandler calibHandler, dai::CameraBoardSocket cameraId, int width, int height,
   Point2f topLeftPixelId, Point2f bottomRightPixelId)
@@ -299,7 +361,13 @@ ImageMsgs::CameraInfo ImageConverter::calibrationToCameraInfo(
   auto & distortions = cameraData.d;
   auto & projection = cameraData.p;
   auto & rotation = cameraData.r;
-
+  // Set rotation to reasonable default even for non-stereo pairs
+  rotation[0] = rotation[4] = rotation[8] = 1;
+  for (size_t i = 0; i < 3; i++) {
+    std::copy(
+      flatIntrinsics.begin() + i * 3, flatIntrinsics.begin() + (i + 1) * 3,
+      projection.begin() + i * 4);
+  }
   std::copy(flatIntrinsics.begin(), flatIntrinsics.end(), intrinsics.begin());
 
   distCoeffs = calibHandler.getDistortionCoefficients(cameraId);
@@ -308,7 +376,6 @@ ImageMsgs::CameraInfo ImageConverter::calibrationToCameraInfo(
     distortions.push_back(static_cast<double>(distCoeffs[i]));
   }
 
-    std::cout<<"Setting projection and rotation matrix"<<std::endl;
   // Setting Projection matrix if the cameras are stereo pair. Right as the first and left as the second.
   if (calibHandler.getStereoRightCameraId() != dai::CameraBoardSocket::AUTO &&
     calibHandler.getStereoLeftCameraId() != dai::CameraBoardSocket::AUTO)
@@ -347,25 +414,11 @@ ImageMsgs::CameraInfo ImageConverter::calibrationToCameraInfo(
 
       std::copy(stereoFlatIntrinsics.begin(), stereoFlatIntrinsics.end(), projection.begin());
       std::copy(flatRectifiedRotation.begin(), flatRectifiedRotation.end(), rotation.begin());
-    } else {
-      // If the cameras are not stereo pair, the rotation matrix is set to identity matrix.
-      // Also, projection matrix [0:3,0:3] is set to instrinsic matrix k.
-      std::cout<<"Setting rotation matrix to identity matrix"<<std::endl;
-      std::fill(rotation.begin(), rotation.end(), 0);
-      rotation[0] = 1.0;
-      rotation[4] = 1.0;
-      rotation[8] = 1.0;
-      std::cout<<"Setting projection matrix to intrinsic matrix"<<std::endl;
-      std::fill(projection.begin(), projection.end(), 0);
-      for (int i = 0; i < 3; i++) {
-        std::copy(intrinsics.begin() + 3 * i, intrinsics.begin() + 3 * (i + 1), projection.begin() + 4 * i);
-      }
     }
-  } 
+  }
   cameraData.distortion_model = "rational_polynomial";
 
   return cameraData;
 }
-
 }  // namespace ros
 }  // namespace dai

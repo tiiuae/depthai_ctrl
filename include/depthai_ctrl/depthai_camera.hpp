@@ -48,6 +48,7 @@
 #include <camera_info_manager/camera_info_manager.hpp>
 
 #include <depthai_ctrl/ImageConverter.hpp>
+#include <depthai_ctrl/DisparityConverter.hpp>
 #include <depthai_ctrl/ImgDetectionConverter.hpp>
 
 
@@ -73,6 +74,7 @@ public:
     _videoH265(false),
     _useMonoCams(false),
     _useRawColorCam(false),
+    _useDepth(false),
     _useVideoFromColorCam(true),
     _useAutoFocus(false),
     _useUSB3(false),
@@ -88,6 +90,7 @@ public:
     _leftCamCallback(0),
     _rightCamCallback(0),
     _colorCamCallback(0),
+    _depthCallback(0),
     _videoEncoderCallback(0),
     _passthroughCallback(0)
   {
@@ -105,6 +108,7 @@ public:
     _videoH265(false),
     _useMonoCams(false),
     _useRawColorCam(false),
+    _useDepth(false),
     _useVideoFromColorCam(true),
     _useAutoFocus(false),
     _useUSB3(false),
@@ -120,6 +124,7 @@ public:
     _leftCamCallback(0),
     _rightCamCallback(0),
     _colorCamCallback(0),
+    _depthCallback(0),
     _videoEncoderCallback(0),
     _passthroughCallback(0)
   {
@@ -138,8 +143,7 @@ public:
   void Stop()
   {
     // TODO, maybe remove callbacks?
-    if (_thread_running && bool(_device))
-    {
+    if (_thread_running && bool(_device)) {
       _thread_running = false;
       _device.reset();
     }
@@ -155,6 +159,7 @@ private:
   void onLeftCamCallback(const std::shared_ptr<dai::ADatatype> data);
   void onRightCallback(const std::shared_ptr<dai::ADatatype> data);
   void onColorCamCallback(const std::shared_ptr<dai::ADatatype> data);
+  void onDepthCallback(const std::shared_ptr<dai::ADatatype> data);
   void onPassthroughCallback(const std::shared_ptr<dai::ADatatype> data);
   void onVideoEncoderCallback(const std::shared_ptr<dai::ADatatype> data);
   void onNeuralNetworkCallback(const std::shared_ptr<dai::ADatatype> data);
@@ -168,6 +173,7 @@ private:
   std::shared_ptr<dai::DataOutputQueue> _leftQueue;
   std::shared_ptr<dai::DataOutputQueue> _rightQueue;
   std::shared_ptr<dai::DataOutputQueue> _colorQueue;
+  std::shared_ptr<dai::DataOutputQueue> _depthQueue;
   std::shared_ptr<dai::DataOutputQueue> _passthroughQueue;
   std::shared_ptr<dai::DataInputQueue> _colorCamInputQueue;
   std::shared_ptr<dai::DataOutputQueue> _neuralNetworkOutputQueue;
@@ -180,6 +186,7 @@ private:
   bool _videoH265;
   bool _useMonoCams;
   bool _useRawColorCam;
+  bool _useDepth;
   bool _useVideoFromColorCam;
   bool _useAutoFocus;
   bool _useUSB3;
@@ -191,10 +198,11 @@ private:
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _left_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _right_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _color_publisher;
+  std::shared_ptr<rclcpp::Publisher<ImageMsg>> _depth_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _passthrough_publisher;
   std::shared_ptr<rclcpp::Publisher<CompressedImageMsg>> _video_publisher;
 
-  rclcpp::TimerBase::SharedPtr     _auto_focus_timer;
+  rclcpp::TimerBase::SharedPtr _auto_focus_timer;
   std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Detection2DArray>> _detection_roi_publisher;
 
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
@@ -203,8 +211,9 @@ private:
   std::string _left_camera_frame, _right_camera_frame, _color_camera_frame;
   std::string _nn_directory, _cameraName;
   dai::DataOutputQueue::CallbackId _leftCamCallback, _rightCamCallback, _colorCamCallback,
-    _videoEncoderCallback, _neuralNetworkCallback, _passthroughCallback;
+    _depthCallback, _videoEncoderCallback, _neuralNetworkCallback, _passthroughCallback;
   dai::CalibrationHandler _calibrationHandler;
+  std::shared_ptr<dai::rosBridge::DisparityConverter> _depth_disparity_converter;
   std::shared_ptr<dai::rosBridge::ImageConverter> _color_camera_converter;
   std::shared_ptr<dai::rosBridge::ImageConverter> _left_camera_converter;
   std::shared_ptr<dai::rosBridge::ImageConverter> _right_camera_converter;
@@ -224,6 +233,14 @@ private:
     {dai::RawImgFrame::Type::RGB888p, "rgb8"},
     {dai::RawImgFrame::Type::NV12, "rgb8"},
     {dai::RawImgFrame::Type::YUV420p, "rgb8"}};
+
+  std::unordered_map<dai::UsbSpeed, std::string> usbSpeedEnumMap = {
+    {dai::UsbSpeed::UNKNOWN, "Unknown"},
+    {dai::UsbSpeed::LOW, "Low"},
+    {dai::UsbSpeed::FULL, "Full"},
+    {dai::UsbSpeed::HIGH, "High"},
+    {dai::UsbSpeed::SUPER, "Super"},
+    {dai::UsbSpeed::SUPER_PLUS, "SuperPlus"}};
 };
 
 }  // namespace depthai_ctrl

@@ -9,31 +9,21 @@ namespace ros
 ImgDetectionConverter::ImgDetectionConverter(
   std::string frameName, int width, int height,
   bool normalized)
-: _frameName(frameName), _width(width), _height(height), _normalized(normalized), _sequenceNum(0) {}
-
-void ImgDetectionConverter::toRosMsg(
-  std::shared_ptr<dai::ImgDetections> inNetData,
-  VisionMsgs::Detection2DArray & opDetectionMsg,
-  TimePoint tStamp,
-  int32_t sequenceNum)
+: _frameName(frameName), _width(width), _height(height), _normalized(normalized), _steadyBaseTime(
+    std::chrono::steady_clock::now())
 {
-  toRosMsg(inNetData, opDetectionMsg);
-  int32_t sec = std::chrono::duration_cast<std::chrono::seconds>(tStamp.time_since_epoch()).count();
-  int32_t nsec =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(tStamp.time_since_epoch()).count() %
-    1000000000UL;
-  opDetectionMsg.header.stamp = rclcpp::Time(sec, nsec);
-
-  opDetectionMsg.header.frame_id = _frameName;
+  _rosBaseTime = rclcpp::Clock().now();
 }
 
 void ImgDetectionConverter::toRosMsg(
   std::shared_ptr<dai::ImgDetections> inNetData,
-  VisionMsgs::Detection2DArray & opDetectionMsg)
+  std::deque<VisionMsgs::Detection2DArray> & opDetectionMsgs)
 {
-// setting the header
-  opDetectionMsg.header.stamp = rclcpp::Clock().now();
+  // setting the header
+  auto tstamp = inNetData->getTimestamp();
+  VisionMsgs::Detection2DArray opDetectionMsg;
 
+  opDetectionMsg.header.stamp = getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
   opDetectionMsg.header.frame_id = _frameName;
   opDetectionMsg.detections.resize(inNetData->detections.size());
 
@@ -64,18 +54,23 @@ void ImgDetectionConverter::toRosMsg(
     opDetectionMsg.detections[i].results[0].hypothesis.class_id = std::to_string(
       inNetData->detections[i].label);
     opDetectionMsg.detections[i].results[0].hypothesis.score = inNetData->detections[i].confidence;
+
     opDetectionMsg.detections[i].bbox.center.x = xCenter;
     opDetectionMsg.detections[i].bbox.center.y = yCenter;
     opDetectionMsg.detections[i].bbox.size_x = xSize;
     opDetectionMsg.detections[i].bbox.size_y = ySize;
   }
+
+  opDetectionMsgs.push_back(opDetectionMsg);
 }
 
 Detection2DArrayPtr ImgDetectionConverter::toRosMsgPtr(
   std::shared_ptr<dai::ImgDetections> inNetData)
 {
-  Detection2DArrayPtr ptr = std::make_shared<VisionMsgs::Detection2DArray>();
-  toRosMsg(inNetData, *ptr);
+  std::deque<VisionMsgs::Detection2DArray> msgQueue;
+  toRosMsg(inNetData, msgQueue);
+  auto msg = msgQueue.front();
+  Detection2DArrayPtr ptr = std::make_shared<VisionMsgs::Detection2DArray>(msg);
   return ptr;
 }
 

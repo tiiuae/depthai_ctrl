@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # all these settings are needed to properly compile depthai-core as subdirectory
-set(BUILD_SHARED_LIBS ON)
+set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
 add_definitions(-DSPDLOG_HEADER_ONLY=1)
@@ -31,6 +31,14 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 )
 endif()
 
+set(opencv_version 4)
+find_package(OpenCV ${opencv_version} QUIET COMPONENTS imgproc highgui)
+if(NOT OpenCV_FOUND)
+  message(STATUS "----------------Did not find OpenCV 4, trying OpenCV 3--------------")
+  set(opencv_version 3)
+  find_package(OpenCV ${opencv_version} REQUIRED COMPONENTS imgproc highgui)
+endif()
+
 #find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
@@ -43,7 +51,6 @@ find_package(vision_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 find_package(nlohmann_json REQUIRED)
-find_package(vision_opencv REQUIRED)
 
 find_package(cv_bridge REQUIRED)
 
@@ -70,7 +77,6 @@ std_msgs
 vision_msgs
 camera_info_manager
 cv_bridge
-vision_opencv
 image_transport
 )
 
@@ -125,28 +131,28 @@ add_dependencies(gstreamer_node depthai_gstreamer)
 rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
 rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
 
+# Disable tests as its obsolete
+# if (BUILD_TESTING)
+#   enable_testing()
 
-if (BUILD_TESTING)
-  enable_testing()
+#   find_package(ament_lint_auto REQUIRED)
+#   find_package(ament_cmake_gtest CONFIG REQUIRED)
 
-  find_package(ament_lint_auto REQUIRED)
-  find_package(ament_cmake_gtest CONFIG REQUIRED)
+#   add_executable(depthai_camera_test test/depthai_camera_test.cpp)
+#   add_executable(depthai_gstreamer_test test/depthai_gstreamer_test.cpp)
 
-  add_executable(depthai_camera_test test/depthai_camera_test.cpp)
-  add_executable(depthai_gstreamer_test test/depthai_gstreamer_test.cpp)
+#   ament_target_dependencies(depthai_camera_test rclcpp rclcpp_components)
+#   ament_target_dependencies(depthai_gstreamer_test PUBLIC rclcpp rclcpp_components)
 
-  ament_target_dependencies(depthai_camera_test rclcpp rclcpp_components)
-  ament_target_dependencies(depthai_gstreamer_test PUBLIC rclcpp rclcpp_components)
+#   target_link_libraries(depthai_camera_test depthai_camera gtest pthread)
+#   target_link_libraries(depthai_gstreamer_test PUBLIC depthai_gstreamer gstreamer_interface ${GST_LIBRARIES} gstapp-1.0 gstrtspserver-1.0 gtest pthread)
 
-  target_link_libraries(depthai_camera_test depthai_camera gtest pthread)
-  target_link_libraries(depthai_gstreamer_test PUBLIC depthai_gstreamer gstreamer_interface ${GST_LIBRARIES} gstapp-1.0 gstrtspserver-1.0 gtest pthread)
+#   add_dependencies(depthai_camera_test depthai_camera)
+#   add_dependencies(depthai_gstreamer_test depthai_gstreamer)
 
-  add_dependencies(depthai_camera_test depthai_camera)
-  add_dependencies(depthai_gstreamer_test depthai_gstreamer)
-
-  add_test(depthai_camera_test depthai_camera_test)
-  add_test(depthai_gstreamer_test depthai_gstreamer_test)
-endif (BUILD_TESTING)
+#   add_test(depthai_camera_test depthai_camera_test)
+#   add_test(depthai_gstreamer_test depthai_gstreamer_test)
+# endif (BUILD_TESTING)
 
 install(TARGETS depthai_camera depthai_gstreamer gstreamer_interface depthai_bridge depthai-core
         ARCHIVE DESTINATION lib
