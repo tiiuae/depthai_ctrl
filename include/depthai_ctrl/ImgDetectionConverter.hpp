@@ -29,8 +29,8 @@ public:
   Detection2DArrayPtr toRosMsgPtr(std::shared_ptr<dai::ImgDetections> inNetData);
 
 private:
-  int _width, _height;
   const std::string _frameName;
+  int _width, _height;
   bool _normalized;
   std::chrono::time_point<std::chrono::steady_clock> _steadyBaseTime;
   rclcpp::Time _rosBaseTime;

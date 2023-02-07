@@ -46,6 +46,7 @@ find_package(image_transport REQUIRED)
 find_package(camera_info_manager REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(stereo_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -72,9 +73,11 @@ link_directories(${GST_LIBRARY_DIRS})
 set(camera_dependencies
 rclcpp
 sensor_msgs
+stereo_msgs
 geometry_msgs
 std_msgs
 vision_msgs
+rclcpp_components
 camera_info_manager
 cv_bridge
 image_transport
@@ -110,7 +113,7 @@ target_link_libraries(gstreamer_interface PUBLIC ${GST_LIBRARIES} gstapp-1.0)
 
 # DepthAI GStreamer as Component library
 add_library(depthai_gstreamer SHARED src/depthai_gstreamer.cpp)
-ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs)
+ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs rclcpp_components)
 target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0 gstreamer_interface)
 
 # DepthAI GStreamer as separate node

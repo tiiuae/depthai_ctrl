@@ -259,7 +259,7 @@ ImagePtr ImageConverter::toRosMsgPtr(std::shared_ptr<dai::ImgFrame> inData)
 void ImageConverter::planarToInterleaved(
   const std::vector<uint8_t> & srcData,
   std::vector<uint8_t> & destData, int w, int h,
-  int numPlanes, int bpp)
+  int numPlanes, [[ maybe_unused ]] int bpp)
 {
   if (numPlanes == 3) {
     // optimization (cache)
@@ -285,7 +285,7 @@ void ImageConverter::planarToInterleaved(
 void ImageConverter::interleavedToPlanar(
   const std::vector<uint8_t> & srcData,
   std::vector<uint8_t> & destData, int w, int h,
-  int numPlanes, int bpp)
+  int numPlanes, [[ maybe_unused ]] int bpp)
 {
   if (numPlanes == 3) {
     // optimization (cache)

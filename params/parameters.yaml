@@ -3,16 +3,17 @@ $(var my_node_ns)/camera_node:
     bitrate: 3000000
     camera_name: oak
     encoding: H264
-    fps: 25
+    video_fps: 25.
+    color_cam_fps: 25.
     height: 720
     lens_position: 120
-    nn_directory: /home/mehmet/Downloads/tiny-yolo-v4_openvino_2021.2_6shave.blob
-    use_auto_focus: true
+    nn_directory: /depthai_configs/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
+    use_auto_focus: false
     use_mono_cams: false
     use_depth: false
     use_neural_network: false
     use_passthrough_preview: false
-    use_raw_color_cam: true
+    use_raw_color_cam: false
     use_sim_time: false
     use_usb_three: false
     use_video_from_color_cam: true

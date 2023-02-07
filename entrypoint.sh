@@ -25,6 +25,30 @@ if [[ ${DEPTHAI_PARAM_FILE+x} != "" ]]; then
 	ROS_FLAGS="params_file:=${DEPTHAI_PARAM_FILE} ${ROS_FLAGS}"
 fi
 
+if [ "${USE_RAW_CAMERA}" = "1" ]; then
+    ROS_FLAGS="${ROS_FLAGS} use_raw_color_cam:=true"
+    if [ "${USE_NEURAL_NETWORK}" = "1" ]; then
+        ROS_FLAGS="${ROS_FLAGS} use_neural_network:=true"
+    fi
+else
+    ROS_FLAGS="${ROS_FLAGS} use_raw_color_cam:=false"
+fi
+
+if [ "${USE_USB_THREE}" = "1" ]; then
+    ROS_FLAGS="${ROS_FLAGS} use_usb_three:=true"
+else
+    if [ "${USE_RAW_CAMERA}" = "1" ]; then
+        ROS_FLAGS="${ROS_FLAGS} use_video_from_color_cam:=true"
+        echo "WARNING: Using raw camera, but not using USB tree. Enabling video from color camera."
+    fi
+fi
+if [ "${USE_MONO_CAMS}" = "1" ]; then
+    ROS_FLAGS="${ROS_FLAGS} use_mono_cams:=true"
+fi
+if [ "${USE_AUTO_FOCUS}" = "1" ]; then
+    ROS_FLAGS="${ROS_FLAGS} use_auto_focus:=true"
+fi
+
 mode="${1}"
 if [ "${mode}" = "gstreamer" ]; then
     ros-with-env ros2 run depthai_ctrl gstreamer_node \

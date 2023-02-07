@@ -30,19 +30,6 @@ using Profile = dai::VideoEncoderProperties::Profile;
 using std::chrono::duration_cast;
 using std::chrono::nanoseconds;
 using std::chrono::seconds;
-static const std::vector<std::string> labelMap = {
-  "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
-  "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog",
-  "horse",
-  "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag",
-  "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat",
-  "baseball glove",
-  "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife",
-  "spoon",
-  "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza",
-  "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor",
-  "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-  "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"};
 
 void DepthAICamera::Initialize()
 {
@@ -91,7 +78,8 @@ void DepthAICamera::Initialize()
   declare_parameter<std::string>("encoding", "H264");
   declare_parameter<int>("width", 1280);
   declare_parameter<int>("height", 720);
-  declare_parameter<int>("fps", 25);
+  declare_parameter<double>("video_fps", 25.);
+  declare_parameter<double>("color_cam_fps", 25.);
   declare_parameter<int>("bitrate", 3000000);
   declare_parameter<int>("lens_position", 110);
   declare_parameter<bool>("use_mono_cams", false);
@@ -105,7 +93,8 @@ void DepthAICamera::Initialize()
 
   _videoWidth = get_parameter("width").as_int();
   _videoHeight = get_parameter("height").as_int();
-  _videoFps = get_parameter("fps").as_int();
+  _videoFps = get_parameter("video_fps").as_double();
+  _colorCamFps = get_parameter("color_cam_fps").as_double();
   _videoBitrate = get_parameter("bitrate").as_int();
   _videoLensPosition = get_parameter("lens_position").as_int();
   _videoH265 = (get_parameter("encoding").as_string() == "H265");
@@ -125,7 +114,8 @@ void DepthAICamera::Initialize()
   RCLCPP_INFO(get_logger(), "[%s]: Video stream parameters:", get_name());
   RCLCPP_INFO(get_logger(), "[%s]:   Width: %d", get_name(), _videoWidth);
   RCLCPP_INFO(get_logger(), "[%s]:   Height: %d", get_name(), _videoHeight);
-  RCLCPP_INFO(get_logger(), "[%s]:   FPS: %d", get_name(), _videoFps);
+  RCLCPP_INFO(get_logger(), "[%s]:   Video FPS: %f", get_name(), _videoFps);
+  RCLCPP_INFO(get_logger(), "[%s]:   Color Cam FPS: %f", get_name(), _colorCamFps);
   RCLCPP_INFO(get_logger(), "[%s]:   Bitrate: %d", get_name(), _videoBitrate);
   RCLCPP_INFO(get_logger(), "[%s]:   Lens position: %d", get_name(), _videoLensPosition);
   RCLCPP_INFO(get_logger(), "[%s]:   H265: %s", get_name(), _videoH265 ? "true" : "false");
@@ -172,6 +162,11 @@ void DepthAICamera::Initialize()
   // support multiple streams without any bandwidth issues.
   _useUSB3 = get_parameter("use_usb_three").as_bool();
   _lastFrameTime = rclcpp::Time(0);
+
+  _change_paramaters_srv = create_service<rcl_interfaces::srv::SetParameters>(
+    "camera/change_parameters",
+    std::bind(&DepthAICamera::changeParametersCallback, this, _1, _2),
+    rmw_qos_profile_services_default);
 }
 
 void DepthAICamera::AutoFocusTimer()
@@ -187,6 +182,153 @@ void DepthAICamera::AutoFocusTimer()
     }
     changeFocusMode(_useAutoFocus);
     _auto_focus_timer->cancel();
+  }
+}
+
+void DepthAICamera::changeParametersCallback(
+  const std::shared_ptr<rcl_interfaces::srv::SetParameters::Request> request,
+  std::shared_ptr<rcl_interfaces::srv::SetParameters::Response> response)
+{
+  response->results.resize(request->parameters.size());
+
+  bool restart_required = true;
+  bool new_camera_state = _thread_running;
+  for (size_t i = 0; i < request->parameters.size(); i++) {
+    auto param = request->parameters[i];
+    const auto & type = param.value.type;
+    const auto & name = param.name;
+    response->results[i].successful = false;
+    if (type == rcl_interfaces::msg::ParameterType::PARAMETER_BOOL) {
+      RCLCPP_INFO(
+        get_logger(), "[%s]: Setting %s to %s", get_name(), name.c_str(),
+        param.value.bool_value ? "true" : "false");
+      if (name == "use_mono_cams") {
+        _useMonoCams = param.value.bool_value;
+      } else if (name == "use_raw_color_cam") {
+        _useRawColorCam = param.value.bool_value;
+      } else if (name == "use_nn") {
+        _useNeuralNetwork = param.value.bool_value;
+      } else if (name == "sync_nn") {
+        _syncNN = param.value.bool_value;
+      } else if (name == "use_depth") {
+        _useDepth = param.value.bool_value;
+      } else if (name == "use_video_from_color_cam") {
+        _useVideoFromColorCam = param.value.bool_value;
+      } else if (name == "use_auto_focus") {
+        if (param.value.bool_value != _useAutoFocus) {
+          _useAutoFocus = param.value.bool_value;
+          changeFocusMode(_useAutoFocus);
+          RCLCPP_INFO(
+            this->get_logger(), "Change focus mode to %s",
+            _useAutoFocus ? "auto" : "manual");
+          restart_required = false;
+        }
+      } else if (name == "camera_running") {
+        new_camera_state = param.value.bool_value;
+      } else {
+        response->results[i].reason = "Unsupported parameter type";
+        continue;
+      }
+    } else if (param.value.type == rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE) {
+      RCLCPP_INFO(
+        get_logger(), "[%s]: Setting %s to %f", get_name(),
+        name.c_str(), param.value.double_value);
+      if (name == "video_fps") {
+        if (param.value.double_value > 60.0 || param.value.double_value < 0.2) {
+          response->results[i].reason = "FPS must be between 0.2 and 30";
+          continue;
+        }
+        _videoFps = param.value.double_value;
+      } else if (name == "color_cam_fps") {
+        if (param.value.double_value > 60.0 || param.value.double_value < 2) {
+          response->results[i].reason = "FPS must be between 2.0 and 60";
+          continue;
+        }
+        _colorCamFps = param.value.double_value;
+      } else {
+        response->results[i].reason = "Unsupported parameter type";
+        continue;
+      }
+    } else if (param.value.type == rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER) {
+      RCLCPP_INFO(
+        get_logger(), "[%s]: Setting %s to %ld", get_name(),
+        name.c_str(), param.value.integer_value);
+      if (name == "width") {
+        if (param.value.integer_value > 3840 || param.value.integer_value % 8 != 0) {
+          response->results[i].reason = "Width must be a multiple of 8 and less than 3840";
+          continue;
+        }
+        _videoWidth = param.value.integer_value;
+      } else if (name == "height") {
+        if (param.value.integer_value > 2160 || param.value.integer_value % 8 != 0) {
+          response->results[i].reason = "Height must be a multiple of 8 and less than 2160";
+          continue;
+        }
+        _videoHeight = param.value.integer_value;
+      } else if (name == "bitrate") {
+        if (param.value.integer_value < 40000) {
+          response->results[i].reason = "Bitrate must be at least 40000";
+          continue;
+        }
+        _videoBitrate = param.value.integer_value;
+      } else if (name == "lens_position") {
+        if (param.value.integer_value < 0 || param.value.integer_value > 255) {
+          response->results[i].reason = "Lens position must be between 0 and 255";
+          continue;
+        }
+        _videoLensPosition = param.value.integer_value;
+        changeLensPosition(_videoLensPosition);
+        restart_required = false;
+      } else {
+        response->results[i].reason = "Unsupported parameter type";
+        continue;
+      }
+    } else if (param.value.type == rcl_interfaces::msg::ParameterType::PARAMETER_STRING) {
+      RCLCPP_INFO(
+        get_logger(), "[%s]: Setting %s to %s", get_name(),
+        name.c_str(), param.value.string_value.c_str());
+      if (name == "encoding" &&
+        (param.value.string_value == "H264" || param.value.string_value == "H265"))
+      {
+        if (param.value.string_value != "H264" && param.value.string_value != "H265") {
+          response->results[i].reason = "Unsupported encoding type";
+          continue;
+        }
+        _videoH265 = param.value.string_value == "H265" ? true : false;
+      }
+    } else {
+      RCLCPP_ERROR(
+        get_logger(), "Set parameter failed, unsupported parameter type %d",
+        param.value.type);
+      continue;
+    }
+    response->results[i].successful = true;
+  }
+  if (!new_camera_state) {
+    if (_thread_running) {
+      RCLCPP_INFO(this->get_logger(), "Stopping video stream");
+      _firstFrameReceived = false;
+      Stop();
+    } else {
+      RCLCPP_INFO(this->get_logger(), "The video stream is not running");
+    }
+    return;
+  }
+
+  if (restart_required) {
+    if (_thread_running) {
+      RCLCPP_INFO(this->get_logger(), "Restarting video stream");
+      _firstFrameReceived = false;
+      Stop();
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Starting video stream");
+    }
+    _auto_focus_timer->reset();
+    _auto_focus_timer =
+      this->create_wall_timer(
+      std::chrono::duration<double>(10.0),
+      std::bind(&DepthAICamera::AutoFocusTimer, this));
+    TryRestarting();
   }
 }
 
@@ -207,7 +349,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
     if (command == "start" && !_thread_running) {
       int width = _videoWidth;
       int height = _videoHeight;
-      int fps = _videoFps;
+      double fps = _videoFps;
       int bitrate = _videoBitrate;
 
       int videoLensPosition = _videoLensPosition;
@@ -224,7 +366,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
       if (!cmd["Height"].empty() && cmd["Height"].is_number_integer()) {
         nlohmann::from_json(cmd["Height"], height);
       }
-      if (!cmd["Fps"].empty() && cmd["Fps"].is_number_integer()) {
+      if (!cmd["Fps"].empty() && cmd["Fps"].is_number_float()) {
         nlohmann::from_json(cmd["Fps"], fps);
       }
       if (!cmd["Bitrate"].empty() && cmd["Bitrate"].is_number_integer()) {
@@ -373,7 +515,7 @@ void DepthAICamera::TryRestarting()
     colorCamera->setPreviewSize(_videoWidth, _videoHeight);
   }
   colorCamera->setVideoSize(_videoWidth, _videoHeight);
-  colorCamera->setFps(_videoFps);
+  colorCamera->setFps(_colorCamFps);
 
   // Like mono cameras, color camera is disabled by default to reduce computational load.
   auto xoutColor = _pipeline->create<dai::node::XLinkOut>();
@@ -383,11 +525,12 @@ void DepthAICamera::TryRestarting()
       xoutColor->input.setBlocking(false);
       xoutColor->input.setQueueSize(1);
       colorCamera->video.link(xoutColor->input);
-    } else if (!_useNeuralNetwork) {
-      colorCamera->preview.link(xoutColor->input);
     } else {
-      RCLCPP_WARN(
-        this->get_logger(), "Color camera video is disabled because neural network is enabled");
+      colorCamera->preview.link(xoutColor->input);
+      RCLCPP_WARN_EXPRESSION(
+        this->get_logger(),
+        _useNeuralNetwork,
+        "Not using the video from camera! Color camera preview will be sized to NN input size!");
     }
   }
 
@@ -423,6 +566,7 @@ void DepthAICamera::TryRestarting()
   Profile encoding = _videoH265 ? Profile::H265_MAIN : Profile::H264_MAIN;
   videoEncoder->setDefaultProfilePreset(_videoFps, encoding);
   videoEncoder->setBitrate(_videoBitrate);
+  videoEncoder->setFrameRate(_videoFps);
   RCLCPP_INFO(
     this->get_logger(), "[%s]: VideoEncoder FPS: %f",
     get_name(), videoEncoder->getFrameRate());

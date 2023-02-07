@@ -71,9 +71,9 @@ private:
   static std::unordered_map<dai::RawImgFrame::Type, std::string> planarEncodingEnumMap;
 
   // dai::RawImgFrame::Type _srcType;
+  const std::string _frameName = "";
   bool _daiInterleaved;
   // bool c
-  const std::string _frameName = "";
   void planarToInterleaved(
     const std::vector<uint8_t> & srcData, std::vector<uint8_t> & destData,
     int w, int h, int numPlanes, int bpp);

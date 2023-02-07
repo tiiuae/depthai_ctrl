@@ -29,7 +29,7 @@ void ImgDetectionConverter::toRosMsg(
 
   // TODO(Sachin): check if this works fine for normalized detection
   // publishing
-  for (int i = 0; i < inNetData->detections.size(); ++i) {
+  for (size_t i = 0; i < inNetData->detections.size(); ++i) {
     int xMin, yMin, xMax, yMax;
     if (_normalized) {
       xMin = inNetData->detections[i].xmin;
@@ -55,8 +55,8 @@ void ImgDetectionConverter::toRosMsg(
       inNetData->detections[i].label);
     opDetectionMsg.detections[i].results[0].hypothesis.score = inNetData->detections[i].confidence;
 
-    opDetectionMsg.detections[i].bbox.center.x = xCenter;
-    opDetectionMsg.detections[i].bbox.center.y = yCenter;
+    opDetectionMsg.detections[i].bbox.center.position.x = xCenter;
+    opDetectionMsg.detections[i].bbox.center.position.y = yCenter;
     opDetectionMsg.detections[i].bbox.size_x = xSize;
     opDetectionMsg.detections[i].bbox.size_y = ySize;
   }

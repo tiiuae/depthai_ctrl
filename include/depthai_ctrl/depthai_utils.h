@@ -26,6 +26,20 @@
 namespace depthai_ctrl
 {
 
+static const std::vector<std::string> labelMap = {
+  "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
+  "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog",
+  "horse",
+  "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag",
+  "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat",
+  "baseball glove",
+  "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife",
+  "spoon",
+  "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza",
+  "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor",
+  "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+  "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"};
+
 /// ROS2 Node which works as DepthAI Camera driver
 struct DepthAIUtils
 {
@@ -52,7 +66,7 @@ struct DepthAIUtils
   static bool ValidateCameraParameters(
     const int width,
     const int height,
-    const int fps,
+    const double fps,
     const int bitrate,
     const int lens_position,
     std::string encoding,
@@ -67,7 +81,7 @@ struct DepthAIUtils
       return false;
     }
 
-    if (fps < 5 || fps > 60) {
+    if (fps < 0.1 || fps > 60) {
       error = "Required video stream 'fps' is incorrect.";
       return false;
     }

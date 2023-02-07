@@ -104,32 +104,32 @@ def generate_launch_description():
 
     declare_use_raw_color_cam_cmd = DeclareLaunchArgument(
         'use_raw_color_cam',
-        default_value='true',
+        default_value='false',
         description='The raw color camera of the camera.')
 
     declare_use_video_from_color_cam_cmd = DeclareLaunchArgument(
         'use_video_from_color_cam',
-        default_value='true',
+        default_value='false',
         description='The video from color camera of the camera.')
 
     declare_use_auto_focus_cmd = DeclareLaunchArgument(
         'use_auto_focus',
-        default_value='true',
+        default_value='false',
         description='The auto focus of the camera.')
 
     declare_use_usb_three_cmd = DeclareLaunchArgument(
         'use_usb_three',
-        default_value='true',
+        default_value='false',
         description='The usb three of the camera.')
 
     declare_use_neural_network_cmd = DeclareLaunchArgument(
         'use_neural_network',
-        default_value='true',
+        default_value='false',
         description='The neural network of the camera.')
 
     declare_use_passthrough_preview_cmd = DeclareLaunchArgument(
         'use_passthrough_preview',
-        default_value='true',
+        default_value='false',
         description='The passthrough preview of the camera.')
 
     set_namespace_cmd = SetLaunchConfiguration('my_node_ns', DRONE_DEVICE_ID)
@@ -142,17 +142,16 @@ def generate_launch_description():
             emulate_tty=True,
             namespace=DRONE_DEVICE_ID,
             remappings=remappings,
-            parameters=[ParameterFile(parameters_file, allow_substs=True)]
-            # parameters=[ParameterFile(parameters_file, allow_substs=True),
-            #             {
-            #                 'use_mono_cams': use_mono_cams,
-            #                 'use_raw_color_cam': use_raw_color_cam,
-            #                 'use_video_from_color_cam': use_video_from_color_cam,
-            #                 'use_auto_focus': use_auto_focus,
-            #                 'use_usb_three': use_usb_three,
-            #                 'use_neural_network': use_neural_network,
-            #                 'use_passthrough_preview': use_passthrough_preview,
-            #             }],
+            parameters=[ParameterFile(parameters_file, allow_substs=True),
+                        {
+                            'use_mono_cams': use_mono_cams,
+                            'use_raw_color_cam': use_raw_color_cam,
+                            'use_video_from_color_cam': use_video_from_color_cam,
+                            'use_auto_focus': use_auto_focus,
+                            'use_usb_three': use_usb_three,
+                            'use_neural_network': use_neural_network,
+                            'use_passthrough_preview': use_passthrough_preview,
+                        }],
     )
 
     rsp_node = Node(

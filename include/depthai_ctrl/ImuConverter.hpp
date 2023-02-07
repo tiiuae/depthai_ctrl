@@ -7,8 +7,9 @@
 
 #include "depthai/depthai.hpp"
 
-    #include "rclcpp/rclcpp.hpp"
-    #include "sensor_msgs/msg/imu.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/imu.hpp"
+
 namespace dai
 {
 
@@ -26,8 +27,8 @@ public:
   ImuPtr toRosMsgPtr(const std::shared_ptr<dai::IMUData> inData);
 
 private:
-  uint32_t _sequenceNum;
   const std::string _frameName = "";
+  uint32_t _sequenceNum;
 };
 
 }  // namespace ros

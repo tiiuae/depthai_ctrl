@@ -1,4 +1,4 @@
-FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v1.0.0 AS builder
+FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v2.0.0 AS builder
 
 # TODO: not sure how many of these deps are actually needed for building. at least this:
 # libusb-1.0-0-dev
@@ -17,6 +17,9 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libopencv-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN curl https://artifacts.luxonis.com/artifactory/luxonis-depthai-data-local/network/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob \
+    -o /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
+
 COPY . /main_ws/src/
 # this:
 # 1) builds the application
@@ -26,10 +29,11 @@ RUN /packaging/build.sh
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:v1.0.0
+FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.0.0
 
 RUN mkdir /depthai_configs
 COPY --from=builder /main_ws/src/params /depthai_configs/.
+COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_configs/.
 
 VOLUME /depthai_configs
 ENV DEPTHAI_PARAM_FILE /depthai_configs/parameters.yaml

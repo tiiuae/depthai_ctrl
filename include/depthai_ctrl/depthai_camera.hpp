@@ -68,7 +68,8 @@ public:
   : Node("camera_node"),
     _videoWidth(1280),
     _videoHeight(720),
-    _videoFps(25),
+    _videoFps(25.),
+    _colorCamFps(25.),
     _videoBitrate(3000000),
     _videoLensPosition(110),
     _videoH265(false),
@@ -102,7 +103,8 @@ public:
   : Node("camera_node", options),
     _videoWidth(1280),
     _videoHeight(720),
-    _videoFps(25),
+    _videoFps(25.),
+    _colorCamFps(25.),
     _videoBitrate(3000000),
     _videoLensPosition(110),
     _videoH265(false),
@@ -166,6 +168,9 @@ private:
   std::shared_ptr<ImageMsg> ConvertImage(std::shared_ptr<dai::ImgFrame>, const std::string &);
   void Initialize();
   void VideoStreamCommand(std_msgs::msg::String::SharedPtr);
+  void changeParametersCallback(
+    const std::shared_ptr<rcl_interfaces::srv::SetParameters::Request> request,
+    std::shared_ptr<rcl_interfaces::srv::SetParameters::Response> response);
 
   std::shared_ptr<dai::Device> _device;
   std::shared_ptr<dai::Pipeline> _pipeline;
@@ -180,7 +185,8 @@ private:
 
   int _videoWidth;
   int _videoHeight;
-  int _videoFps;
+  double _videoFps;
+  double _colorCamFps;
   int _videoBitrate;
   int _videoLensPosition;
   bool _videoH265;
@@ -201,6 +207,8 @@ private:
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _depth_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _passthrough_publisher;
   std::shared_ptr<rclcpp::Publisher<CompressedImageMsg>> _video_publisher;
+
+  rclcpp::Service<rcl_interfaces::srv::SetParameters>::SharedPtr _change_paramaters_srv;
 
   rclcpp::TimerBase::SharedPtr _auto_focus_timer;
   std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Detection2DArray>> _detection_roi_publisher;
