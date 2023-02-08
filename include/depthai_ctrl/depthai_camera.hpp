@@ -69,7 +69,6 @@ public:
     _videoWidth(1280),
     _videoHeight(720),
     _videoFps(25.),
-    _colorCamFps(25.),
     _videoBitrate(3000000),
     _videoLensPosition(110),
     _videoH265(false),
@@ -104,7 +103,6 @@ public:
     _videoWidth(1280),
     _videoHeight(720),
     _videoFps(25.),
-    _colorCamFps(25.),
     _videoBitrate(3000000),
     _videoLensPosition(110),
     _videoH265(false),
@@ -186,7 +184,6 @@ private:
   int _videoWidth;
   int _videoHeight;
   double _videoFps;
-  double _colorCamFps;
   int _videoBitrate;
   int _videoLensPosition;
   bool _videoH265;

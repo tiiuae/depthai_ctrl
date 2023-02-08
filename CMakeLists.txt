@@ -68,8 +68,6 @@ include_directories(SYSTEM ${GST_INCLUDE_DIRS})
 include_directories(include)
 link_directories(${GST_LIBRARY_DIRS})
 
-
-
 set(camera_dependencies
 rclcpp
 sensor_msgs
@@ -93,6 +91,16 @@ add_library(depthai_bridge SHARED ${LIB_SRC})
 ament_target_dependencies(depthai_bridge PUBLIC ${camera_dependencies})
 target_link_libraries(depthai_bridge PUBLIC depthai-core opencv_imgproc opencv_highgui)
 
+message(STATUS "--------------------------$ENV{ROS_DISTRO} ---")
+message(STATUS $ENV{ROS_DISTRO})
+
+if($ENV{ROS_DISTRO} STREQUAL "galactic" OR ($ENV{ROS_DISTRO} STREQUAL "rolling" AND "${ubuntu_version}" STREQUAL "20.04\n"))
+  target_compile_definitions(depthai_bridge PRIVATE IS_GALACTIC)
+endif()
+
+if($ENV{ROS_DISTRO} STREQUAL "humble")
+  target_compile_definitions(depthai_bridge PRIVATE IS_HUMBLE)
+endif()
 
 # DepthAI Camera as Component library
 add_library(depthai_camera SHARED src/depthai_camera.cpp)
@@ -157,7 +165,7 @@ rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::Dept
 #   add_test(depthai_gstreamer_test depthai_gstreamer_test)
 # endif (BUILD_TESTING)
 
-install(TARGETS depthai_camera depthai_gstreamer gstreamer_interface depthai_bridge depthai-core
+install(TARGETS depthai_camera depthai_gstreamer gstreamer_interface depthai_bridge
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)

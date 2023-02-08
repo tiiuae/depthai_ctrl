@@ -79,7 +79,6 @@ void DepthAICamera::Initialize()
   declare_parameter<int>("width", 1280);
   declare_parameter<int>("height", 720);
   declare_parameter<double>("video_fps", 25.);
-  declare_parameter<double>("color_cam_fps", 25.);
   declare_parameter<int>("bitrate", 3000000);
   declare_parameter<int>("lens_position", 110);
   declare_parameter<bool>("use_mono_cams", false);
@@ -94,7 +93,6 @@ void DepthAICamera::Initialize()
   _videoWidth = get_parameter("width").as_int();
   _videoHeight = get_parameter("height").as_int();
   _videoFps = get_parameter("video_fps").as_double();
-  _colorCamFps = get_parameter("color_cam_fps").as_double();
   _videoBitrate = get_parameter("bitrate").as_int();
   _videoLensPosition = get_parameter("lens_position").as_int();
   _videoH265 = (get_parameter("encoding").as_string() == "H265");
@@ -115,7 +113,6 @@ void DepthAICamera::Initialize()
   RCLCPP_INFO(get_logger(), "[%s]:   Width: %d", get_name(), _videoWidth);
   RCLCPP_INFO(get_logger(), "[%s]:   Height: %d", get_name(), _videoHeight);
   RCLCPP_INFO(get_logger(), "[%s]:   Video FPS: %f", get_name(), _videoFps);
-  RCLCPP_INFO(get_logger(), "[%s]:   Color Cam FPS: %f", get_name(), _colorCamFps);
   RCLCPP_INFO(get_logger(), "[%s]:   Bitrate: %d", get_name(), _videoBitrate);
   RCLCPP_INFO(get_logger(), "[%s]:   Lens position: %d", get_name(), _videoLensPosition);
   RCLCPP_INFO(get_logger(), "[%s]:   H265: %s", get_name(), _videoH265 ? "true" : "false");
@@ -234,17 +231,11 @@ void DepthAICamera::changeParametersCallback(
         get_logger(), "[%s]: Setting %s to %f", get_name(),
         name.c_str(), param.value.double_value);
       if (name == "video_fps") {
-        if (param.value.double_value > 60.0 || param.value.double_value < 0.2) {
+        if (param.value.double_value > 60.0 || param.value.double_value < 2.0) {
           response->results[i].reason = "FPS must be between 0.2 and 30";
           continue;
         }
         _videoFps = param.value.double_value;
-      } else if (name == "color_cam_fps") {
-        if (param.value.double_value > 60.0 || param.value.double_value < 2) {
-          response->results[i].reason = "FPS must be between 2.0 and 60";
-          continue;
-        }
-        _colorCamFps = param.value.double_value;
       } else {
         response->results[i].reason = "Unsupported parameter type";
         continue;
@@ -347,100 +338,12 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
       command.begin(), command.end(), command.begin(),
       [](unsigned char c) {return std::tolower(c);});
     if (command == "start" && !_thread_running) {
-      int width = _videoWidth;
-      int height = _videoHeight;
-      double fps = _videoFps;
-      int bitrate = _videoBitrate;
-
-      int videoLensPosition = _videoLensPosition;
-      std::string encoding = _videoH265 ? "H265" : "H264";
-      std::string error_message{};
-      bool useMonoCams = _useMonoCams;
-      bool useRawColorCam = _useRawColorCam;
-      bool useAutoFocus = _useAutoFocus;
-
-
-      if (!cmd["Width"].empty() && cmd["Width"].is_number_integer()) {
-        nlohmann::from_json(cmd["Width"], width);
-      }
-      if (!cmd["Height"].empty() && cmd["Height"].is_number_integer()) {
-        nlohmann::from_json(cmd["Height"], height);
-      }
-      if (!cmd["Fps"].empty() && cmd["Fps"].is_number_float()) {
-        nlohmann::from_json(cmd["Fps"], fps);
-      }
-      if (!cmd["Bitrate"].empty() && cmd["Bitrate"].is_number_integer()) {
-        nlohmann::from_json(cmd["Bitrate"], bitrate);
-      }
-      if (!cmd["Encoding"].empty() && cmd["Encoding"].is_string()) {
-        nlohmann::from_json(cmd["Encoding"], encoding);
-      }
-      if (!cmd["UseMonoCams"].empty() && cmd["UseMonoCams"].is_string()) {
-        nlohmann::from_json(cmd["UseMonoCams"], useMonoCams);
-      }
-      if (!cmd["UseAutoFocus"].empty() && cmd["UseAutoFocus"].is_boolean()) {
-        nlohmann::from_json(cmd["UseAutoFocus"], useAutoFocus);
-      }
-      if (!cmd["LensPosition"].empty() && cmd["LensPosition"].is_number_integer()) {
-        nlohmann::from_json(cmd["LensPosition"], videoLensPosition);
-      }
-
-      if (DepthAIUtils::ValidateCameraParameters(
-          width, height, fps, bitrate, videoLensPosition, encoding,
-          error_message))
-      {
-        _videoWidth = width;
-        _videoHeight = height;
-        _videoFps = fps;
-        _videoBitrate = bitrate;
-        _videoLensPosition = videoLensPosition;
-        _videoH265 = (encoding == "H265");
-        _useMonoCams = useMonoCams;
-        _useRawColorCam = useRawColorCam;
-        _useAutoFocus = useAutoFocus;
-
         _auto_focus_timer->reset();
         _auto_focus_timer =
           this->create_wall_timer(
           std::chrono::duration<double>(10.0),
           std::bind(&DepthAICamera::AutoFocusTimer, this));
         TryRestarting();
-      } else {
-        RCLCPP_ERROR(this->get_logger(), error_message.c_str());
-      }
-    }
-    if (command == "change_focus" && _thread_running) {
-      bool useAutoFocus = _useAutoFocus;
-      if (!cmd["UseAutoFocus"].empty() && cmd["UseAutoFocus"].is_boolean()) {
-        nlohmann::from_json(cmd["UseAutoFocus"], useAutoFocus);
-      }
-      if (_useAutoFocus != useAutoFocus) {
-        _useAutoFocus = useAutoFocus;
-        changeFocusMode(_useAutoFocus);
-        RCLCPP_INFO(
-          this->get_logger(), "Change focus mode to %s",
-          _useAutoFocus ? "auto" : "manual");
-      }
-      if (useAutoFocus) {
-        RCLCPP_ERROR(this->get_logger(), "Cannot change focus while auto focus is enabled");
-      } else {
-
-        int videoLensPosition = get_parameter("lens_position").as_int();
-
-        if (!cmd["LensPosition"].empty() && cmd["LensPosition"].is_number_integer()) {
-          nlohmann::from_json(cmd["LensPosition"], videoLensPosition);
-          RCLCPP_INFO(this->get_logger(), "Received lens position cmd of %d", videoLensPosition);
-        }
-        if (videoLensPosition >= 0 || videoLensPosition <= 255) {
-          RCLCPP_INFO(this->get_logger(), "Changing focus to %d", videoLensPosition);
-          _videoLensPosition = videoLensPosition;
-          changeLensPosition(_videoLensPosition);
-        } else {
-          RCLCPP_ERROR(
-            this->get_logger(), "Required video stream 'lens_position' is incorrect.\
-            Valid range is 0-255");
-        }
-      }
     }
     if (command == "stop") {
       if (!_thread_running) {
@@ -515,7 +418,7 @@ void DepthAICamera::TryRestarting()
     colorCamera->setPreviewSize(_videoWidth, _videoHeight);
   }
   colorCamera->setVideoSize(_videoWidth, _videoHeight);
-  colorCamera->setFps(_colorCamFps);
+  colorCamera->setFps(_videoFps);
 
   // Like mono cameras, color camera is disabled by default to reduce computational load.
   auto xoutColor = _pipeline->create<dai::node::XLinkOut>();

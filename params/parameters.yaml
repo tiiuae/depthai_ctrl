@@ -4,7 +4,6 @@ $(var my_node_ns)/camera_node:
     camera_name: oak
     encoding: H264
     video_fps: 25.
-    color_cam_fps: 25.
     height: 720
     lens_position: 120
     nn_directory: /depthai_configs/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
