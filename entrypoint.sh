@@ -27,11 +27,12 @@ fi
 
 if [ "${USE_RAW_CAMERA}" = "1" ]; then
     ROS_FLAGS="${ROS_FLAGS} use_raw_color_cam:=true"
-    if [ "${USE_NEURAL_NETWORK}" = "1" ]; then
-        ROS_FLAGS="${ROS_FLAGS} use_neural_network:=true"
-    fi
 else
     ROS_FLAGS="${ROS_FLAGS} use_raw_color_cam:=false"
+fi
+
+if [ "${USE_NEURAL_NETWORK}" = "1" ]; then
+    ROS_FLAGS="${ROS_FLAGS} use_neural_network:=true"
 fi
 
 if [ "${USE_USB_THREE}" = "1" ]; then
