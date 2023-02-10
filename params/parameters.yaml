@@ -5,7 +5,7 @@ $(var my_node_ns)/camera_node:
     encoding: H264
     video_fps: 25.
     height: 720
-    lens_position: 120
+    lens_position: 110
     nn_directory: /depthai_configs/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
     use_auto_focus: false
     use_mono_cams: false
