@@ -17,15 +17,15 @@
 
 /* Authors(Unikie Oy): Mehmet Killioglu, Manuel Segarra-Abad, Sergey */
 
-#include "depthai_gstreamer.h"
-#include "depthai_utils.h"
+#include "depthai_ctrl/depthai_gstreamer.h"
+#include "depthai_ctrl/depthai_utils.h"
 #include <gst/app/gstappsrc.h>
 #include <gst/gst.h>
 #include <gst/gstbus.h>
 #include <gst/gstcaps.h>
 #include <gst/gstelement.h>
 #include <gst/gstpipeline.h>
-#include <gstreamer_interface.hpp>
+#include <depthai_ctrl/gstreamer_interface.hpp>
 #include <nlohmann/json.hpp>
 #include <mutex>
 #include <queue>
@@ -38,7 +38,7 @@ DepthAIGStreamer::DepthAIGStreamer(int argc, char * argv[])
 : Node("depthai_gstreamer"), _impl(nullptr)
 {
   _impl = new GstInterface(argc, argv);
-  
+
   Initialize();
 }
 
@@ -47,7 +47,7 @@ DepthAIGStreamer::DepthAIGStreamer(const rclcpp::NodeOptions & options)
 {
 
   _impl = new GstInterface(0, 0);
-  
+
   Initialize();
 }
 
@@ -62,9 +62,6 @@ DepthAIGStreamer::~DepthAIGStreamer()
 
 void DepthAIGStreamer::Initialize()
 {
-  declare_parameter<std::string>("video_stream_topic", "camera/color/video");
-
-  const std::string video_stream_topic = get_parameter("video_stream_topic").as_string();
 
   _callback_group_timer = this->create_callback_group(
     rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -81,8 +78,9 @@ void DepthAIGStreamer::Initialize()
   auto cmd_sub_opt = rclcpp::SubscriptionOptions();
   cmd_sub_opt.callback_group = _callback_group_cmd_subscriber;
 
+  rclcpp::QoS qos_profile(10);
   _video_subscriber = create_subscription<CompressedImageMsg>(
-    video_stream_topic,
+    "camera/color/video",
     rclcpp::SystemDefaultsQoS(),
     std::bind(&DepthAIGStreamer::GrabVideoMsg, this, std::placeholders::_1), video_sub_opt);
 
@@ -158,7 +156,7 @@ void DepthAIGStreamer::GrabVideoMsg(const CompressedImageMsg::SharedPtr video_ms
 
   RCLCPP_DEBUG(
     get_logger(),
-    "[GST %s]RECEIVED CHUNK # %d.%d", 
+    "[GST %s]RECEIVED CHUNK # %d.%d",
     _impl->IsStreamPlaying() ? "STREAMING" : "STOPPED", stamp.sec, stamp.nanosec);
 
   g_mutex_lock(&_impl->haveDataCondMutex);

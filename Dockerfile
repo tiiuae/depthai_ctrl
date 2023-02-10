@@ -14,10 +14,13 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libgstreamer-plugins-good1.0-0 \
     nlohmann-json3-dev \
     gstreamer1.0-x \
+    libopencv-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . /main_ws/src/
+RUN curl https://artifacts.luxonis.com/artifactory/luxonis-depthai-data-local/network/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob \
+    -o /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
 
+COPY . /main_ws/src/
 # this:
 # 1) builds the application
 # 2) packages the application as .deb in /main_ws/
@@ -27,6 +30,13 @@ RUN /packaging/build.sh
 #  └── build                 ▼
 
 FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.0.0
+
+RUN mkdir /depthai_configs
+COPY --from=builder /main_ws/src/params /depthai_configs/.
+COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_configs/.
+
+VOLUME /depthai_configs
+ENV DEPTHAI_PARAM_FILE /depthai_configs/parameters.yaml
 
 ENTRYPOINT [ "/entrypoint.sh" ]
 
@@ -41,6 +51,13 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     gir1.2-gst-rtsp-server-1.0 \
     gstreamer1.0-libav \
     gstreamer1.0-rtsp \
+    libopencv-dev \
+    ros-${ROS_DISTRO}-vision-msgs \
+    ros-${ROS_DISTRO}-camera-info-manager \
+    ros-${ROS_DISTRO}-cv-bridge \
+    ros-${ROS_DISTRO}-robot-state-publisher \
+    ros-${ROS_DISTRO}-image-transport \
+    ros-$ROS_DISTRO-xacro \
     && rm -rf /var/lib/apt/lists/*
 
 RUN ln -s /usr/bin/true /usr/bin/udevadm \

@@ -1,0 +1,30 @@
+$(var my_node_ns)/camera_node:
+  ros__parameters:
+    bitrate: 3000000
+    camera_name: oak
+    encoding: H264
+    video_fps: 25.
+    height: 720
+    lens_position: 120
+    nn_directory: /depthai_configs/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
+    use_auto_focus: false
+    use_mono_cams: false
+    use_depth: false
+    use_neural_network: false
+    use_passthrough_preview: false
+    use_raw_color_cam: false
+    use_sim_time: false
+    use_usb_three: false
+    use_video_from_color_cam: true
+    width: 1280
+
+$(var my_node_ns)/depthai_gstreamer:
+  ros__parameters:
+    address: rtsps://DroneUser:22f6c4de-6144-4f6c-82ea-8afcdf19f316@video-stream.sacplatform.com:8555
+    bitrate: 3000000
+    encoding: H264
+    fps: 25
+    height: 720
+    start_stream_on_boot: true
+    use_sim_time: false
+    width: 1280

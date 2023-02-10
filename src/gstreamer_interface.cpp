@@ -17,7 +17,7 @@
 
 /* Authors(Unikie Oy): Mehmet Killioglu, Manuel Segarra-Abad, Sergey */
 
-#include <gstreamer_interface.hpp>
+#include <depthai_ctrl/gstreamer_interface.hpp>
 
 namespace depthai_ctrl
 {
@@ -97,7 +97,7 @@ void GstInterface::StopStream(void)
     //gst_object_unref(GST_OBJECT(_appSource));
     _pipeline = nullptr;
     _appSource = nullptr;
-    
+
   }
   std::cout << "Unreferencing bus element!" << std::endl;
   if (_bus != nullptr) {
@@ -431,8 +431,9 @@ void * GstInterface::CreatePipeline(gpointer data)
       std::cout << "Queue is empty after timeout! Building default pipeline." << std::endl;
       gst->_isStreamDefault = true;
       break;
-    }else {
-      std::cout << "Queue is not empty after timeout! Building camera streaming pipeline." << std::endl;
+    } else {
+      std::cout << "Queue is not empty after timeout! Building camera streaming pipeline." <<
+          std::endl;
       gst->_isStreamDefault = false;
       break;
 
