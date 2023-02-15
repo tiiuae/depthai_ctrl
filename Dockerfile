@@ -31,6 +31,10 @@ RUN /packaging/build.sh
 
 FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.0.0
 
+HEALTHCHECK --interval=5s \
+	CMD fog-health check --metric=frames_received_count --diff-gte=1.0 \
+		--metrics-from=http://localhost:${METRICS_PORT}/metrics --only-if-nonempty=${METRICS_PORT}
+
 RUN mkdir /depthai_configs
 COPY --from=builder /main_ws/src/params /depthai_configs/.
 COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_configs/.

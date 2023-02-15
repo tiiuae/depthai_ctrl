@@ -52,6 +52,10 @@
 #include <depthai_ctrl/ImgDetectionConverter.hpp>
 
 
+#include <prometheus/counter.h>
+#include <prometheus/exposer.h>
+#include <prometheus/registry.h>
+
 namespace depthai_ctrl
 {
 
@@ -81,6 +85,7 @@ public:
     _firstFrameReceived(false),
     _useNeuralNetwork(false),
     _syncNN(true),
+    metrics_registry(std::make_shared<prometheus::Registry>()),
     _thread_running(false),
     _left_camera_frame("left_camera_frame"),
     _right_camera_frame("right_camera_frame"),
@@ -94,6 +99,7 @@ public:
     _videoEncoderCallback(0),
     _passthroughCallback(0)
   {
+    initMetrics();
     Initialize();
     TryRestarting();
   }
@@ -115,6 +121,7 @@ public:
     _firstFrameReceived(false),
     _useNeuralNetwork(false),
     _syncNN(true),
+    metrics_registry(std::make_shared<prometheus::Registry>()),
     _thread_running(false),
     _left_camera_frame("left_camera_frame"),
     _right_camera_frame("right_camera_frame"),
@@ -128,7 +135,7 @@ public:
     _videoEncoderCallback(0),
     _passthroughCallback(0)
   {
-
+    initMetrics();
     Initialize();
     TryRestarting();
   }
@@ -152,6 +159,22 @@ public:
   void TryRestarting();
 
 private:
+  void initMetrics()
+  {
+    frames_received_count = &(prometheus::BuildCounter()
+      .Name("frames_received_count")
+      .Help("Number of video frames received from DepthAI camera")
+      .Register(*metrics_registry).Add({}));
+
+    auto metrics_port = getenv("METRICS_PORT");
+    if (metrics_port != nullptr) // start HTTP endpoint only if requested
+    {
+        metrics_exposer = std::make_shared<prometheus::Exposer>("0.0.0.0:" + std::string(metrics_port));
+
+        metrics_exposer->RegisterCollectable(this->metrics_registry);
+    }
+  }
+
   void ProcessingThread();
   void AutoFocusTimer();
   void changeLensPosition(int lens_position);
@@ -196,6 +219,9 @@ private:
   bool _firstFrameReceived;
   bool _useNeuralNetwork;
   bool _syncNN;
+  std::shared_ptr<prometheus::Registry> metrics_registry;
+  std::shared_ptr<prometheus::Exposer> metrics_exposer;
+  prometheus::Counter* frames_received_count;
   rclcpp::Time _lastFrameTime;
 
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _left_publisher;

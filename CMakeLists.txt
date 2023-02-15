@@ -52,6 +52,7 @@ find_package(vision_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 find_package(nlohmann_json REQUIRED)
+find_package(prometheus-cpp CONFIG REQUIRED)
 
 find_package(cv_bridge REQUIRED)
 
@@ -105,13 +106,15 @@ endif()
 # DepthAI Camera as Component library
 add_library(depthai_camera SHARED src/depthai_camera.cpp)
 ament_target_dependencies(depthai_camera PUBLIC ${camera_dependencies})
-target_link_libraries(depthai_camera PUBLIC depthai-core opencv_imgproc opencv_highgui depthai_bridge)
+target_link_libraries(depthai_camera PUBLIC depthai-core opencv_imgproc opencv_highgui depthai_bridge prometheus-cpp::pull)
+# ament_target_dependencies(depthai_camera PUBLIC rclcpp std_msgs sensor_msgs)
 
 
 # DepthAI Camera as separate node
 add_executable(camera_node src/camera_node.cpp)
 ament_target_dependencies(camera_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(camera_node PUBLIC depthai_camera)
+target_link_libraries(camera_node PRIVATE prometheus-cpp::pull)
 
 
 # DepthAI GStreamer as Component library
@@ -133,6 +136,7 @@ target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
 add_executable(depthai_ctrl src/depthai_ctrl.cpp)
 ament_target_dependencies(depthai_ctrl PUBLIC rclcpp rclcpp_components)
 target_link_libraries(depthai_ctrl PUBLIC depthai_camera depthai_gstreamer)
+target_link_libraries(depthai_ctrl PRIVATE prometheus-cpp::pull)
 
 # Explicitly force to re-compile binary whenever library changed
 add_dependencies(camera_node depthai_camera)
