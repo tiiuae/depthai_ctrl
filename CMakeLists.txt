@@ -114,7 +114,6 @@ target_link_libraries(depthai_camera PUBLIC depthai-core opencv_imgproc opencv_h
 add_executable(camera_node src/camera_node.cpp)
 ament_target_dependencies(camera_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(camera_node PUBLIC depthai_camera)
-target_link_libraries(camera_node PRIVATE prometheus-cpp::pull)
 
 
 # DepthAI GStreamer as Component library
