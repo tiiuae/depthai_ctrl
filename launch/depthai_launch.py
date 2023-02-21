@@ -6,6 +6,7 @@ from launch_ros.actions import Node
 from launch.actions import SetLaunchConfiguration
 from launch_ros.descriptions import ParameterFile
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, Command, PathJoinSubstitution
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -40,6 +41,7 @@ def generate_launch_description():
     use_usb_three = LaunchConfiguration('use_usb_three')
     use_neural_network = LaunchConfiguration('use_neural_network')
     use_passthrough_preview = LaunchConfiguration('use_passthrough_preview')
+    use_state_publisher = LaunchConfiguration('use_state_publisher')
     remappings = []
 
     declare_camera_model_cmd = DeclareLaunchArgument(
@@ -132,6 +134,11 @@ def generate_launch_description():
         default_value='false',
         description='The passthrough preview of the camera.')
 
+    decleare_use_state_publisher_cmd = DeclareLaunchArgument(
+        'use_state_publisher',
+        default_value='false',
+        description='Whether to run the state publisher or not.')
+
     set_namespace_cmd = SetLaunchConfiguration('my_node_ns', DRONE_DEVICE_ID)
 
     depthai_node = Node(
@@ -155,6 +162,7 @@ def generate_launch_description():
     )
 
     rsp_node = Node(
+            condition=IfCondition(use_state_publisher),
             package='robot_state_publisher',
             executable='robot_state_publisher',
             name='oak_state_publisher',
@@ -194,6 +202,7 @@ def generate_launch_description():
     ld.add_action(declare_use_usb_three_cmd)
     ld.add_action(declare_use_neural_network_cmd)
     ld.add_action(declare_use_passthrough_preview_cmd)
+    ld.add_action(decleare_use_state_publisher_cmd)
 
     ld.add_action(set_namespace_cmd)
 
