@@ -35,6 +35,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -62,6 +63,7 @@ class DepthAICamera : public rclcpp::Node
 {
 public:
   using ImageMsg = sensor_msgs::msg::Image;
+  using CameraInfoMsg = sensor_msgs::msg::CameraInfo;
   using CompressedImageMsg = sensor_msgs::msg::CompressedImage;
   using Ptr = std::shared_ptr<depthai_ctrl::DepthAICamera>;
   DepthAICamera()
@@ -204,6 +206,8 @@ private:
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _depth_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _passthrough_publisher;
   std::shared_ptr<rclcpp::Publisher<CompressedImageMsg>> _video_publisher;
+  std::shared_ptr<rclcpp::Publisher<CameraInfoMsg>> _camera_info_publisher;
+  std::unique_ptr<sensor_msgs::msg::CameraInfo> _rgb_camera_info;
 
   rclcpp::Service<rcl_interfaces::srv::SetParameters>::SharedPtr _change_paramaters_srv;
 

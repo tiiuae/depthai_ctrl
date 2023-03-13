@@ -56,6 +56,7 @@ void DepthAICamera::Initialize()
   _left_publisher = create_publisher<ImageMsg>("camera/left/image_raw", 10);
   _right_publisher = create_publisher<ImageMsg>("camera/right/image_raw", 10);
   _color_publisher = create_publisher<ImageMsg>("camera/color/image_raw", 10);
+  _camera_info_publisher = create_publisher<CameraInfoMsg>("camera/color/camera_info", 10);
   _depth_publisher = create_publisher<ImageMsg>("camera/depth/image_raw", 10);
   _passthrough_publisher = create_publisher<ImageMsg>("camera/color/image_passthrough", 10);
 
@@ -159,6 +160,7 @@ void DepthAICamera::Initialize()
   // support multiple streams without any bandwidth issues.
   _useUSB3 = get_parameter("use_usb_three").as_bool();
   _lastFrameTime = rclcpp::Time(0);
+  _rgb_camera_info = std::make_unique<CameraInfoMsg>();
 
   _change_paramaters_srv = create_service<rcl_interfaces::srv::SetParameters>(
     "camera/change_parameters",
@@ -498,6 +500,8 @@ void DepthAICamera::TryRestarting()
   dai::rosBridge::ImageConverter rgbConverter(_color_camera_frame, true);
   sensor_msgs::msg::CameraInfo rgbCameraInfo = rgbConverter.calibrationToCameraInfo(
     _calibrationHandler, dai::CameraBoardSocket::RGB, _videoWidth, _videoHeight);
+  _rgb_camera_info = std::make_unique<sensor_msgs::msg::CameraInfo>(rgbCameraInfo);
+
   // print camerainfo
   RCLCPP_INFO(this->get_logger(), "[%s]: CameraInfo:", get_name());
   RCLCPP_INFO(this->get_logger(), "[%s]:   width: %d", get_name(), rgbCameraInfo.width);
@@ -682,6 +686,11 @@ void DepthAICamera::onColorCamCallback(
   for (std::shared_ptr<dai::ImgFrame> & colorPtr : colorPtrVector) {
     auto image = _color_camera_converter->toRosMsgPtr(colorPtr);
     _color_publisher->publish(*image);
+    if (_camera_info_publisher->get_subscription_count() > 0) {
+      _rgb_camera_info->header.stamp = image->header.stamp;
+      _rgb_camera_info->header.frame_id = image->header.frame_id;
+      _camera_info_publisher->publish(*_rgb_camera_info);
+    }
   }
 }
 
