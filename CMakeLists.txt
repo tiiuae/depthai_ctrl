@@ -9,6 +9,11 @@ add_definitions(-DFMT_HEADER_ONLY=1)
 set(HUNTER_CONFIGURATION_TYPES ${CMAKE_BUILD_TYPE}) # makes possible to compile also Debug build
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core ${CMAKE_CURRENT_BINARY_DIR}/depthai-core EXCLUDE_FROM_ALL)
 
+option(BUILD_GSTREAMER "enable building gstreamer" OFF)
+if(DEFINED ENV{BUILD_GSTREAMER})
+  set(BUILD_GSTREAMER "$ENV{BUILD_GSTREAMER}")
+endif()
+
 project(depthai_ctrl)
 
 # pkg-config configurations path.
@@ -50,7 +55,8 @@ find_package(stereo_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
+
+
 find_package(nlohmann_json REQUIRED)
 
 find_package(cv_bridge REQUIRED)
@@ -64,9 +70,13 @@ if(NOT OpenCV_FOUND)
 endif()
 
 
+if (BUILD_GSTREAMER)
+pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 include_directories(SYSTEM ${GST_INCLUDE_DIRS})
-include_directories(include)
 link_directories(${GST_LIBRARY_DIRS})
+endif()
+
+include_directories(include)
 
 set(camera_dependencies
 rclcpp
@@ -113,7 +123,11 @@ add_executable(camera_node src/camera_node.cpp)
 ament_target_dependencies(camera_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(camera_node PUBLIC depthai_camera)
 
+add_dependencies(camera_node depthai_camera)
 
+rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
+
+if (BUILD_GSTREAMER)
 # DepthAI GStreamer as Component library
 add_library(gstreamer_interface SHARED src/gstreamer_interface.cpp)
 ament_target_dependencies(gstreamer_interface PUBLIC rclcpp std_msgs sensor_msgs)
@@ -128,19 +142,17 @@ target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0 gstre
 add_executable(gstreamer_node src/gstreamer_node.cpp)
 ament_target_dependencies(gstreamer_node PUBLIC rclcpp rclcpp_components)
 target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
-
 # Combined DepthAI node
 add_executable(depthai_ctrl src/depthai_ctrl.cpp)
 ament_target_dependencies(depthai_ctrl PUBLIC rclcpp rclcpp_components)
 target_link_libraries(depthai_ctrl PUBLIC depthai_camera depthai_gstreamer)
 
-# Explicitly force to re-compile binary whenever library changed
-add_dependencies(camera_node depthai_camera)
 add_dependencies(depthai_ctrl depthai_gstreamer depthai_camera)
 add_dependencies(gstreamer_node depthai_gstreamer)
-
-rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
 rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
+endif()
+
+
 
 # Disable tests as its obsolete
 # if (BUILD_TESTING)
@@ -164,14 +176,25 @@ rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::Dept
 #   add_test(depthai_camera_test depthai_camera_test)
 #   add_test(depthai_gstreamer_test depthai_gstreamer_test)
 # endif (BUILD_TESTING)
+if (BUILD_GSTREAMER)
+install(TARGETS depthai_gstreamer gstreamer_interface
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin)
+        
+install(TARGETS
+        gstreamer_node depthai_ctrl
+        DESTINATION lib/${PROJECT_NAME})
 
-install(TARGETS depthai_camera depthai_gstreamer gstreamer_interface depthai_bridge
+endif()
+
+install(TARGETS depthai_camera depthai_bridge
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)
 
 install(TARGETS
-        camera_node gstreamer_node depthai_ctrl
+        camera_node
         DESTINATION lib/${PROJECT_NAME})
 
 
