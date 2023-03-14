@@ -54,9 +54,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(stereo_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
-find_package(PkgConfig REQUIRED)
-
-
+# find_package(PkgConfig REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 find_package(cv_bridge REQUIRED)
@@ -152,8 +150,6 @@ add_dependencies(gstreamer_node depthai_gstreamer)
 rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
 endif()
 
-
-
 # Disable tests as its obsolete
 # if (BUILD_TESTING)
 #   enable_testing()
@@ -176,6 +172,7 @@ endif()
 #   add_test(depthai_camera_test depthai_camera_test)
 #   add_test(depthai_gstreamer_test depthai_gstreamer_test)
 # endif (BUILD_TESTING)
+
 if (BUILD_GSTREAMER)
 install(TARGETS depthai_gstreamer gstreamer_interface
         ARCHIVE DESTINATION lib

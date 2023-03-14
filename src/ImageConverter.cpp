@@ -34,9 +34,11 @@ ImageConverter::ImageConverter(bool interleaved)
   _rosBaseTime = rclcpp::Clock().now();
 }
 
-ImageConverter::ImageConverter(const std::string frameName, bool interleaved)
+ImageConverter::ImageConverter(
+  const std::string frameName, bool interleaved,
+  bool use_system_time)
 : _frameName(frameName), _daiInterleaved(interleaved), _steadyBaseTime(
-    std::chrono::steady_clock::now())
+    std::chrono::steady_clock::now()), _useSystemTime(use_system_time)
 {
   _rosBaseTime = rclcpp::Clock().now();
 }
@@ -50,7 +52,8 @@ void ImageConverter::toRosMsgFromBitStream(
   ImageMsgs::Image outImageMsg;
   StdMsgs::Header header;
   header.frame_id = _frameName;
-  header.stamp = getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
+  header.stamp = _useSystemTime ?
+    rclcpp::Clock().now() : getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);;
   std::string encoding;
   int decodeFlags;
   cv::Mat output;
@@ -105,7 +108,8 @@ void ImageConverter::toRosMsg(
   StdMsgs::Header header;
   header.frame_id = _frameName;
 
-  header.stamp = getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
+  header.stamp = _useSystemTime ?
+    rclcpp::Clock().now() : getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
 
   if (planarEncodingEnumMap.find(inData->getType()) != planarEncodingEnumMap.end()) {
     // cv::Mat inImg = inData->getCvFrame();

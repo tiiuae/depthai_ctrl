@@ -86,6 +86,7 @@ void DepthAICamera::Initialize()
   declare_parameter<bool>("use_raw_color_cam", false);
   declare_parameter<bool>("use_depth", false);
   declare_parameter<bool>("use_video_from_color_cam", true);
+  declare_parameter<bool>("use_system_time_in_timestamps", false);
   declare_parameter<bool>("use_auto_focus", false);
   declare_parameter<bool>("use_usb_three", false);
   declare_parameter<bool>("use_neural_network", false);
@@ -101,6 +102,7 @@ void DepthAICamera::Initialize()
   _useRawColorCam = get_parameter("use_raw_color_cam").as_bool();
   _useDepth = get_parameter("use_depth").as_bool();
   _useVideoFromColorCam = get_parameter("use_video_from_color_cam").as_bool();
+  _useSystemTimeInTimestamps = get_parameter("use_system_time_in_timestamps").as_bool();
   _useAutoFocus = get_parameter("use_auto_focus").as_bool();
   _useNeuralNetwork = get_parameter("use_neural_network").as_bool();
   _syncNN = get_parameter("use_passthrough_preview").as_bool();
@@ -129,6 +131,9 @@ void DepthAICamera::Initialize()
   RCLCPP_INFO(
     get_logger(), "[%s]:   Use video from color cam: %s",
     get_name(), _useVideoFromColorCam ? "true" : "false");
+  RCLCPP_INFO(
+    get_logger(), "[%s]:   Use system clock in timestamps: %s",
+    get_name(), _useSystemTimeInTimestamps ? "true" : "false");
   RCLCPP_INFO(
     get_logger(), "[%s]:   Use auto focus: %s",
     get_name(), _useAutoFocus ? "true" : "false");
@@ -211,6 +216,8 @@ void DepthAICamera::changeParametersCallback(
         _syncNN = param.value.bool_value;
       } else if (name == "use_depth") {
         _useDepth = param.value.bool_value;
+      } else if (name == "use_system_time_in_timestamps") {
+        _useSystemTimeInTimestamps = param.value.bool_value;
       } else if (name == "use_video_from_color_cam") {
         _useVideoFromColorCam = param.value.bool_value;
       } else if (name == "use_auto_focus") {
@@ -497,7 +504,7 @@ void DepthAICamera::TryRestarting()
 
   _calibrationHandler = _device->readCalibration();
 
-  dai::rosBridge::ImageConverter rgbConverter(_color_camera_frame, true);
+  dai::rosBridge::ImageConverter rgbConverter(_color_camera_frame, true, _useSystemTimeInTimestamps);
   sensor_msgs::msg::CameraInfo rgbCameraInfo = rgbConverter.calibrationToCameraInfo(
     _calibrationHandler, dai::CameraBoardSocket::RGB, _videoWidth, _videoHeight);
   _rgb_camera_info = std::make_unique<sensor_msgs::msg::CameraInfo>(rgbCameraInfo);
@@ -546,7 +553,7 @@ void DepthAICamera::TryRestarting()
   //dai::rosBridge::ImageConverter rgbConverter(_color_camera_frame, false);
   if (_useNeuralNetwork) {
     _neural_network_converter = std::make_shared<dai::rosBridge::ImgDetectionConverter>(
-      _color_camera_frame, _videoWidth, _videoHeight, false);
+      _color_camera_frame, _videoWidth, _videoHeight, _useSystemTimeInTimestamps, false);
     _neuralNetworkOutputQueue = _device->getOutputQueue("detections", 30, false);
     _neuralNetworkCallback =
       _neuralNetworkOutputQueue->addCallback(
@@ -555,7 +562,7 @@ void DepthAICamera::TryRestarting()
         std::placeholders::_1));
     if (_syncNN) {
       _passthrough_converter = std::make_shared<dai::rosBridge::ImageConverter>(
-        _color_camera_frame, false);
+        _color_camera_frame, false, _useSystemTimeInTimestamps);
       _passthroughQueue =
         _device->getOutputQueue("pass", 30, false);
       _passthroughCallback =
@@ -567,7 +574,7 @@ void DepthAICamera::TryRestarting()
   }
   if (_useRawColorCam) {
     _color_camera_converter = std::make_shared<dai::rosBridge::ImageConverter>(
-      _color_camera_frame, false);
+      _color_camera_frame, false, _useSystemTimeInTimestamps);
     _colorQueue = _device->getOutputQueue("color", 30, false);
     _colorCamCallback =
       _colorQueue->addCallback(
@@ -588,10 +595,9 @@ void DepthAICamera::TryRestarting()
           std::placeholders::_1));
     } else {
       _left_camera_converter = std::make_shared<dai::rosBridge::ImageConverter>(
-        _left_camera_frame, false);
+        _left_camera_frame, false, _useSystemTimeInTimestamps);
       _right_camera_converter = std::make_shared<dai::rosBridge::ImageConverter>(
-        _right_camera_frame,
-        false);
+        _right_camera_frame, false, _useSystemTimeInTimestamps);
       _leftQueue = _device->getOutputQueue("left", 30, false);
       _rightQueue = _device->getOutputQueue("right", 30, false);
 
@@ -749,7 +755,7 @@ void DepthAICamera::onVideoEncoderCallback(
       However, it might still be problematic with the raw color camera. It will be investigated later.
     */
     //const auto stamp = videoPtr->getTimestamp().time_since_epoch().count();
-    const auto stamp = videoPtr->getTimestampDevice().time_since_epoch().count();
+    // const auto stamp = videoPtr->getTimestampDevice().time_since_epoch().count();
     //const auto seq = videoPtr->getSequenceNum();
     //int64_t stamp = (int64_t)seq * (1e9/_videoFps); // Use sequence number for timestamp
 
@@ -758,10 +764,21 @@ void DepthAICamera::onVideoEncoderCallback(
 
     // rclcpp::Time can be initialized directly with nanoseconds only.
     // Internally, when given with seconds and nanoseconds, it casts it to nanoseconds anyways.
-    video_stream_chunk.header.stamp = rclcpp::Time(stamp, RCL_STEADY_TIME);
+    if (_useSystemTimeInTimestamps) {
+      video_stream_chunk.header.stamp = get_clock()->now();
+    } else {
+      const auto stamp = videoPtr->getTimestampDevice().time_since_epoch().count();
+      video_stream_chunk.header.stamp = rclcpp::Time(stamp, RCL_STEADY_TIME);
+    }
     video_stream_chunk.data.swap(videoPtr->getData());
     video_stream_chunk.format = _videoH265 ? "H265" : "H264";
     _video_publisher->publish(video_stream_chunk);
+
+    if (!_useRawColorCam && _camera_info_publisher->get_subscription_count() > 0) {
+      _rgb_camera_info->header.stamp = video_stream_chunk.header.stamp;
+      _rgb_camera_info->header.frame_id = video_stream_chunk.header.frame_id;
+      _camera_info_publisher->publish(*_rgb_camera_info);
+    }
     if (!_firstFrameReceived) {
       _firstFrameReceived = true;
       RCLCPP_INFO(

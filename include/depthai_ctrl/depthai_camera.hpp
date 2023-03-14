@@ -78,6 +78,7 @@ public:
     _useRawColorCam(false),
     _useDepth(false),
     _useVideoFromColorCam(true),
+    _useSystemTimeInTimestamps(false),
     _useAutoFocus(false),
     _useUSB3(false),
     _firstFrameReceived(false),
@@ -112,6 +113,7 @@ public:
     _useRawColorCam(false),
     _useDepth(false),
     _useVideoFromColorCam(true),
+    _useSystemTimeInTimestamps(false),
     _useAutoFocus(false),
     _useUSB3(false),
     _firstFrameReceived(false),
@@ -193,6 +195,7 @@ private:
   bool _useRawColorCam;
   bool _useDepth;
   bool _useVideoFromColorCam;
+  bool _useSystemTimeInTimestamps;
   bool _useAutoFocus;
   bool _useUSB3;
   bool _firstFrameReceived;

@@ -34,7 +34,7 @@ RUN if [ -n "$BUILD_GSTREAMER" ]; then \
 # this:
 # 1) builds the application
 # 2) packages the application as .deb in /main_ws/
-RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build.sh
+RUN BUILD_GSTREAMER=$BUILD_GSTREAMER CI=1 /packaging/build.sh
 
 #  ▲               runtime ──┐
 #  └── build                 ▼
@@ -42,19 +42,6 @@ RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build.sh
 FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.0.0
 ARG BUILD_GSTREAMER
 
-RUN mkdir /depthai_configs
-COPY --from=builder /main_ws/src/params /depthai_configs/.
-COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_configs/.
-
-VOLUME /depthai_configs
-ENV DEPTHAI_PARAM_FILE /depthai_configs/parameters.yaml
-
-ENTRYPOINT [ "/entrypoint.sh" ]
-
-COPY entrypoint.sh /entrypoint.sh
-
-COPY --from=builder /main_ws/ros-*-depthai-ctrl_*_amd64.deb /depthai.deb
-# need update because ROS people have a habit of removing old packages pretty fast
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libusb-1.0-0-dev \
     libopencv-dev \
@@ -76,6 +63,19 @@ RUN if [ -n "$BUILD_GSTREAMER" ]; then \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
+RUN mkdir /depthai_configs
+COPY --from=builder /main_ws/src/params /depthai_configs/.
+COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_configs/.
+
+VOLUME /depthai_configs
+ENV DEPTHAI_PARAM_FILE /depthai_configs/parameters.yaml
+
+ENTRYPOINT [ "/entrypoint.sh" ]
+
+COPY entrypoint.sh /entrypoint.sh
+
+COPY --from=builder /main_ws/ros-*-depthai-ctrl_*_amd64.deb /depthai.deb
+# need update because ROS people have a habit of removing old packages pretty fast
 RUN ln -s /usr/bin/true /usr/bin/udevadm \
     && dpkg -i /depthai.deb && rm /depthai.deb \
     && rm -f /usr/bin/udevadm

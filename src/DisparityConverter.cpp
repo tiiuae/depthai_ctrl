@@ -7,14 +7,15 @@ namespace ros
 {
 
 DisparityConverter::DisparityConverter(
-  const std::string frameName, float focalLength,
+  const std::string frameName, float focalLength, bool use_system_time,
   float baseline, float minDepth, float maxDepth)
 : _frameName(frameName),
   _focalLength(focalLength),
   _baseline(baseline / 100.0),
   _minDepth(minDepth / 100.0),
   _maxDepth(maxDepth / 100.0),
-  _steadyBaseTime(std::chrono::steady_clock::now())
+  _steadyBaseTime(std::chrono::steady_clock::now()),
+  _useSystemTime(use_system_time)
 {
   _rosBaseTime = rclcpp::Clock().now();
 }
@@ -36,7 +37,8 @@ void DisparityConverter::toRosMsg(
   // outDispImageMsg.header       = imgHeader;
   // std::string temp_str(encodingEnumMap[inData->getType()]);
   ImageMsgs::Image & outImageMsg = outDispImageMsg.image;
-  outDispImageMsg.header.stamp = getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
+  outDispImageMsg.header.stamp = _useSystemTime ?
+    rclcpp::Clock().now() : getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
 
   outImageMsg.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
   outImageMsg.header = outDispImageMsg.header;

@@ -37,6 +37,7 @@ def generate_launch_description():
     use_mono_cams = LaunchConfiguration('use_mono_cams')
     use_raw_color_cam = LaunchConfiguration('use_raw_color_cam')
     use_video_from_color_cam = LaunchConfiguration('use_video_from_color_cam')
+    use_system_time_in_timestamps = LaunchConfiguration('use_system_time_in_timestamps')
     use_auto_focus = LaunchConfiguration('use_auto_focus')
     use_usb_three = LaunchConfiguration('use_usb_three')
     use_neural_network = LaunchConfiguration('use_neural_network')
@@ -114,6 +115,11 @@ def generate_launch_description():
         default_value='false',
         description='The video from color camera of the camera.')
 
+    declare_use_system_time_in_timestamps_cmd = DeclareLaunchArgument(
+        'use_system_time_in_timestamps',
+        default_value='false',
+        description='Whether to use system time in video stream of the camera.')
+
     declare_use_auto_focus_cmd = DeclareLaunchArgument(
         'use_auto_focus',
         default_value='false',
@@ -154,6 +160,7 @@ def generate_launch_description():
                             'use_mono_cams': use_mono_cams,
                             'use_raw_color_cam': use_raw_color_cam,
                             'use_video_from_color_cam': use_video_from_color_cam,
+                            'use_system_time_in_timestamps': use_system_time_in_timestamps,
                             'use_auto_focus': use_auto_focus,
                             'use_usb_three': use_usb_three,
                             'use_neural_network': use_neural_network,
@@ -198,6 +205,7 @@ def generate_launch_description():
     ld.add_action(declare_use_mono_cams_cmd)
     ld.add_action(declare_use_raw_color_cam_cmd)
     ld.add_action(declare_use_video_from_color_cam_cmd)
+    ld.add_action(declare_use_system_time_in_timestamps_cmd)
     ld.add_action(declare_use_auto_focus_cmd)
     ld.add_action(declare_use_usb_three_cmd)
     ld.add_action(declare_use_neural_network_cmd)

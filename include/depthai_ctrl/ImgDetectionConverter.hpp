@@ -20,7 +20,9 @@ class ImgDetectionConverter
 {
 public:
   // DetectionConverter() = default;
-  ImgDetectionConverter(std::string frameName, int width, int height, bool normalized = false);
+  ImgDetectionConverter(
+    std::string frameName, int width, int height,
+    bool use_system_time = false, bool normalized = false);
 
   void toRosMsg(
     std::shared_ptr<dai::ImgDetections> inNetData,
@@ -34,6 +36,7 @@ private:
   bool _normalized;
   std::chrono::time_point<std::chrono::steady_clock> _steadyBaseTime;
   rclcpp::Time _rosBaseTime;
+  bool _useSystemTime;
 };
 
 /** TODO(sachin): Do we need to have ros msg -> dai bounding box ?

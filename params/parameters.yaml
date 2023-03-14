@@ -16,6 +16,7 @@ $(var my_node_ns)/camera_node:
     use_sim_time: false
     use_usb_three: false
     use_video_from_color_cam: true
+    use_system_clock_in_video_stream: false
     width: 1280
 
 $(var my_node_ns)/depthai_gstreamer:

@@ -35,6 +35,14 @@ if [ "${USE_NEURAL_NETWORK}" = "1" ]; then
     ROS_FLAGS="${ROS_FLAGS} use_neural_network:=true"
 fi
 
+if [ "${USE_STATE_PUBLISHER}" = "1" ]; then
+    ROS_FLAGS="${ROS_FLAGS} use_state_publisher:=true"
+fi
+
+if [ "${USE_SYSTEM_TIME_IN_TIMESTAMPS}" = "1" ]; then
+    ROS_FLAGS="${ROS_FLAGS} use_system_time_in_timestamps:=true"
+fi
+
 if [ "${USE_USB_THREE}" = "1" ]; then
     ROS_FLAGS="${ROS_FLAGS} use_usb_three:=true"
 else

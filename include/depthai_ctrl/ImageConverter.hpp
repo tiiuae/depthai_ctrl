@@ -40,7 +40,7 @@ class ImageConverter
 {
 public:
   // ImageConverter() = default;
-  ImageConverter(const std::string frameName, bool interleaved);
+  ImageConverter(const std::string frameName, bool interleaved, bool use_system_time = false);
   ImageConverter(bool interleaved);
   void toRosMsgFromBitStream(
     std::shared_ptr<dai::ImgFrame> inData,
@@ -83,6 +83,7 @@ private:
   std::chrono::time_point<std::chrono::steady_clock> _steadyBaseTime;
 
   rclcpp::Time _rosBaseTime;
+  bool _useSystemTime;
 };
 
 }  // namespace ros

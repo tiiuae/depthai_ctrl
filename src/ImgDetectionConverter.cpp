@@ -8,9 +8,9 @@ namespace ros
 
 ImgDetectionConverter::ImgDetectionConverter(
   std::string frameName, int width, int height,
-  bool normalized)
+  bool use_system_time, bool normalized)
 : _frameName(frameName), _width(width), _height(height), _normalized(normalized), _steadyBaseTime(
-    std::chrono::steady_clock::now())
+    std::chrono::steady_clock::now()), _useSystemTime(use_system_time)
 {
   _rosBaseTime = rclcpp::Clock().now();
 }
@@ -23,7 +23,8 @@ void ImgDetectionConverter::toRosMsg(
   auto tstamp = inNetData->getTimestamp();
   VisionMsgs::Detection2DArray opDetectionMsg;
 
-  opDetectionMsg.header.stamp = getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);
+  opDetectionMsg.header.stamp = _useSystemTime ?
+    rclcpp::Clock().now() : getFrameTime(_rosBaseTime, _steadyBaseTime, tstamp);;
   opDetectionMsg.header.frame_id = _frameName;
   opDetectionMsg.detections.resize(inNetData->detections.size());
 
