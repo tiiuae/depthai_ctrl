@@ -1,10 +1,16 @@
 FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v2.0.0 AS builder
-
+ARG BUILD_GSTREAMER
 # TODO: not sure how many of these deps are actually needed for building. at least this:
 # libusb-1.0-0-dev
 # gstreamer-1.0 (<-- but not sure which package brings this)
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libusb-1.0-0-dev \
+    nlohmann-json3-dev \
+    libopencv-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN if [ -n "$BUILD_GSTREAMER" ]; then \
+    apt-get update -y && apt-get install -y --no-install-recommends \
     libgstreamer1.0-0 \
     libgstreamer-plugins-base1.0-dev \
     libgstreamer-plugins-bad1.0-dev \
@@ -12,24 +18,29 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libgstrtspserver-1.0-dev \
     libgstreamer-plugins-base1.0-0 \
     libgstreamer-plugins-good1.0-0 \
-    nlohmann-json3-dev \
     gstreamer1.0-x \
-    libopencv-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 RUN curl https://artifacts.luxonis.com/artifactory/luxonis-depthai-data-local/network/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob \
     -o /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
 
 COPY . /main_ws/src/
+
+RUN if [ -n "$BUILD_GSTREAMER" ]; then \
+    mv /main_ws/src/debian/control.em.gstreamer /main_ws/src/debian/control.em; \
+    fi
+
 # this:
 # 1) builds the application
 # 2) packages the application as .deb in /main_ws/
-RUN /packaging/build.sh
+RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build.sh
 
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
 FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.0.0
+ARG BUILD_GSTREAMER
 
 RUN mkdir /depthai_configs
 COPY --from=builder /main_ws/src/params /depthai_configs/.
@@ -46,11 +57,6 @@ COPY --from=builder /main_ws/ros-*-depthai-ctrl_*_amd64.deb /depthai.deb
 # need update because ROS people have a habit of removing old packages pretty fast
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libusb-1.0-0-dev \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-plugins-ugly \
-    gir1.2-gst-rtsp-server-1.0 \
-    gstreamer1.0-libav \
-    gstreamer1.0-rtsp \
     libopencv-dev \
     ros-${ROS_DISTRO}-vision-msgs \
     ros-${ROS_DISTRO}-camera-info-manager \
@@ -59,6 +65,16 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-image-transport \
     ros-$ROS_DISTRO-xacro \
     && rm -rf /var/lib/apt/lists/*
+
+RUN if [ -n "$BUILD_GSTREAMER" ]; then \
+    apt-get update -y && apt-get install -y --no-install-recommends \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gir1.2-gst-rtsp-server-1.0 \
+    gstreamer1.0-libav \
+    gstreamer1.0-rtsp \
+    && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 RUN ln -s /usr/bin/true /usr/bin/udevadm \
     && dpkg -i /depthai.deb && rm /depthai.deb \
