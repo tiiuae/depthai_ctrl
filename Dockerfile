@@ -1,4 +1,4 @@
-FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v2.0.0 AS builder
+FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:sha-b1c9665 AS builder
 ARG BUILD_GSTREAMER
 # TODO: not sure how many of these deps are actually needed for building. at least this:
 # libusb-1.0-0-dev
@@ -39,7 +39,7 @@ RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build.sh
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.0.0
+FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-b1c9665
 ARG BUILD_GSTREAMER
 
 RUN mkdir /depthai_configs
