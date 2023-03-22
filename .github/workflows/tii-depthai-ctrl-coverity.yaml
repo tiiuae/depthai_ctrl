@@ -15,7 +15,7 @@ jobs:
         with:
           submodules: recursive
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -25,7 +25,7 @@ jobs:
         with:
           driver: docker
       - name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v4
         with:
           file: Dockerfile.coverity
           push: false
