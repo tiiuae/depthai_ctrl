@@ -26,6 +26,8 @@ jobs:
           file: Dockerfile.coverity
           push: false
           tags: dephai_ctrl_coverity:latest
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
       - name: Run coverity scan
         run:
           docker run --rm -e PROJECT_NAME=${{ github.event.repository.name }} dephai_ctrl_coverity:latest
