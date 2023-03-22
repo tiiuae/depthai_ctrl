@@ -1,0 +1,8 @@
+FROM ghcr.io/tiiuae/fog-ros-baseimage-builder-coverity:main
+
+RUN curl https://artifacts.luxonis.com/artifactory/luxonis-depthai-data-local/network/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob \
+    -o /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
+
+COPY . /main_ws/src/
+
+RUN /packaging/build.sh
