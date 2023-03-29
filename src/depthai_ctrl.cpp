@@ -1,5 +1,5 @@
 /*******************************************************************************
-* Copyright 2021 Unikie Oy, Technology Innovation Institute
+* Copyright 2023 Technology Innovation Institute (TII)
 * All rights reserved.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
