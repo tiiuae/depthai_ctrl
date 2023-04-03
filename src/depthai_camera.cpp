@@ -762,6 +762,12 @@ void DepthAICamera::onVideoEncoderCallback(
     video_stream_chunk.data.swap(videoPtr->getData());
     video_stream_chunk.format = _videoH265 ? "H265" : "H264";
     _video_publisher->publish(video_stream_chunk);
+
+    if (!_useRawColorCam && _camera_info_publisher->get_subscription_count() > 0) {
+      _rgb_camera_info->header.stamp = video_stream_chunk.header.stamp;
+      _rgb_camera_info->header.frame_id = video_stream_chunk.header.frame_id;
+      _camera_info_publisher->publish(*_rgb_camera_info);
+    }
     if (!_firstFrameReceived) {
       _firstFrameReceived = true;
       RCLCPP_INFO(
