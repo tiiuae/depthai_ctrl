@@ -15,6 +15,11 @@ ImgDetectionConverter::ImgDetectionConverter(
   _rosBaseTime = rclcpp::Clock().now();
 }
 
+double logit(const double x)
+{
+  return 1 / (1 + std::exp(-x));
+}
+
 void ImgDetectionConverter::toRosMsg(
   std::shared_ptr<dai::ImgDetections> inNetData,
   std::deque<VisionMsgs::Detection2DArray> & opDetectionMsgs)
@@ -54,10 +59,10 @@ void ImgDetectionConverter::toRosMsg(
     opDetectionMsg.detections[i].id = std::to_string(inNetData->detections[i].label);
     opDetectionMsg.detections[i].results[0].hypothesis.class_id = std::to_string(
       inNetData->detections[i].label);
-    opDetectionMsg.detections[i].results[0].hypothesis.score = inNetData->detections[i].confidence;
+    opDetectionMsg.detections[i].results[0].hypothesis.score = logit(inNetData->detections[i].confidence);
 #elif IS_ROS2
     opDetectionMsg.detections[i].results[0].id = std::to_string(inNetData->detections[i].label);
-    opDetectionMsg.detections[i].results[0].score = inNetData->detections[i].confidence;
+    opDetectionMsg.detections[i].results[0].score = logit(inNetData->detections[i].confidence);
 #endif
 #ifdef IS_HUMBLE
     opDetectionMsg.detections[i].bbox.center.position.x = xCenter;
