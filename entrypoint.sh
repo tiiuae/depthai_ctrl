@@ -52,10 +52,8 @@ fi
 
 mode="${1}"
 if [ "${mode}" = "gstreamer" ]; then
-    ros-with-env ros2 run depthai_ctrl gstreamer_node \
-        --ros-args \
-        --remap __ns:=/$DRONE_DEVICE_ID \
-        -p address:=$RTSP_SERVER_ADDRESS/$DRONE_DEVICE_ID &
+    echo "this mode no longer supported."
+    exit 1
 else
     ros-with-env ros2 launch depthai_ctrl depthai_launch.py ${ROS_FLAGS}&
 fi
