@@ -1,0 +1,133 @@
+FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:sha-c549c2f AS builder
+ARG BUILD_GSTREAMER
+# TODO: not sure how many of these deps are actually needed for building. at least this:
+# libusb-1.0-0-dev
+# gstreamer-1.0 (<-- but not sure which package brings this)
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    libusb-1.0-dev \
+    libusb-1.0-staticdev \
+    nlohmann-json-dev \
+    # libyaml-* \
+    yaml-cpp-vendor-dev \
+    cv-bridge-dev \
+    vision-msgs-dev \
+    camera-info-manager-dev \
+    camera-calibration-parsers-dev \
+    xacro-dev \
+    image-transport-dev \
+    python3-pyyaml \
+    libyaml-cpp-dev \
+    libyaml-0-staticdev \
+    libyaml-vendor-dev \
+    libopencv-ts-dev \
+    opencv-staticdev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN if [ -n "$BUILD_GSTREAMER" ]; then \
+    apt-get update -y && apt-get install -y --no-install-recommends \
+    gstreamer1.0-dev \
+    gstreamer1.0-plugins-base-dev \
+    && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+RUN curl https://artifacts.luxonis.com/artifactory/luxonis-depthai-data-local/network/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob \
+    -o /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
+
+COPY . /main_ws/src/
+
+RUN if [ -n "$BUILD_GSTREAMER" ]; then \
+    mv /main_ws/src/debian/control.em.gstreamer /main_ws/src/debian/control.em; \
+    fi
+
+# CV Bridge cmake file has host contamination, which leads to failure in the build.
+# This hardcoded path will be different for each of the build. So, the sed command should find the place using OpenCV_CONFIG_PATH and OpenCV_INSTALL_PATH tags
+RUN cat /usr/share/cv_bridge/cmake/cv_bridge-extras.cmake && \
+    sed -i 's/set(OpenCV_CONFIG_PATH .*)/set(OpenCV_CONFIG_PATH \/usr\/lib\/cmake\/opencv4)/g' /usr/share/cv_bridge/cmake/cv_bridge-extras.cmake && \
+    sed -i 's/set(OpenCV_INSTALL_PATH .*)/set(OpenCV_INSTALL_PATH \/usr)/g' /usr/share/cv_bridge/cmake/cv_bridge-extras.cmake && \
+    cat /usr/share/cv_bridge/cmake/cv_bridge-extras.cmake
+
+# this:
+# 1) builds the application
+# 2) packages the application as .deb in /main_ws/
+# RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build.sh
+
+# RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build_colcon.sh
+
+# riscv64 needs libatomic because the CPU doesn't have atomic primitives. read more:
+#   https://linuxsoft.cern.ch/cern/centos/7/updates/x86_64/repoview/libatomic.html
+WORKDIR /main_ws
+RUN libatomicIfNeeded="" && \
+    if [ $(uname -m) == riscv64 ]; then \
+        libatomicIfNeeded='-DCMAKE_CXX_FLAGS="-latomic" -DCMAKE_C_FLAGS="-latomic"'; \
+    fi && \
+    colcon build --event-handlers console_direct+ --cmake-args -DBUILD_TESTING=0 -DBUILD_GSTREAMER=$BUILD_GSTREAMER $libatomicIfNeeded
+
+#  ▲               runtime ──┐
+#  └── build                 ▼
+
+FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:sha-c549c2f
+ARG BUILD_GSTREAMER
+
+RUN mkdir /depthai_configs
+COPY --from=builder /main_ws/src/params /depthai_configs/.
+COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_configs/.
+
+VOLUME /depthai_configs
+ENV DEPTHAI_PARAM_FILE /depthai_configs/parameters.yaml
+
+ENTRYPOINT [ "/entrypoint.sh" ]
+
+COPY entrypoint.sh /entrypoint.sh
+
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    libusb-1.0 \
+    libudev1 \
+    # libusb-1.0-staticdev \
+    nlohmann-json-dev \
+    # libyaml-* \
+    yaml-cpp-vendor \
+    cv-bridge \
+    vision-msgs \
+    camera-info-manager \
+    camera-calibration-parsers \
+    xacro \
+    image-transport \
+    # python3-pyyaml \
+    libyaml-cpp0.6 \
+    libyaml-0-staticdev \
+    libyaml-vendor \
+    libopencv-ts \
+    opencv-staticdev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN if [ -n "$BUILD_GSTREAMER" ]; then \
+    apt-get update -y && apt-get install -y --no-install-recommends \
+    gstreamer1.0-dev \
+    gstreamer1.0-plugins-base-dev \
+    && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# RUN ln -s /usr/bin/true /usr/bin/udevadm && \ 
+# RUN mkdir -p /etc/udev/rules.d &&  \
+#     # ln -s /usr/bin/true /usr/bin/udevadm && \
+#     # cat << EOF > /etc/udev/rules.d/80-movidius.rules  &&  \
+#     # SUBSYSTEM=="usb", ATTRS{idVendor}=="03e7", MODE="0666"  &&  \
+#     # EOF && \
+RUN echo $'\n\
+SUBSYSTEM=="usb", ATTRS{idVendor}=="03e7", MODE="0666" \n\
+' > /etc/udev/rules.d/80-movidius.rules && \
+    cat /etc/udev/rules.d/80-movidius.rules
+#     chmod 644 /etc/udev/rules.d/80-movidius.rules && \
+#     cat /etc/udev/rules.d/80-movidius.rules
+    # /usr/bin/udevadm control --reload-rules && \
+    # /usr/bin/udevadm trigger
+    # rm -f /usr/bin/udevadm
+# RUN /usr/bin/udevadm control --reload-rules && \
+#     /usr/bin/udevadm trigger
+    # rm -f /usr/bin/udevadm
+# RUN ln -s /usr/bin/true /usr/bin/udevadm \
+#     && dpkg -i /depthai.deb && rm /depthai.deb \
+#     && rm -f /usr/bin/udevadm
+ENV DEPTHAI_LEVEL=debug
+ENV XLINK_LEVEL=debug
+COPY --from=builder $INSTALL_DIR $INSTALL_DIR

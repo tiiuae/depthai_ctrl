@@ -8,7 +8,7 @@ _term() {
         pattern="depthai_ctrl/camera_node"
     fi
 
-    pid_value="$(ps -ax | grep $pattern | grep -v grep | awk '{ print $1 }')"
+    pid_value="$(ps -e | grep $pattern | grep -v grep | awk '{ print $1 }')"
     if [ "$pid_value" != "" ]; then
         pid=$pid_value
         echo "Send SIGINT to pid $pid"
