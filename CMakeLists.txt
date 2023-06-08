@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
+set(CMAKE_BUILD_TYPE Release)
 # all these settings are needed to properly compile depthai-core as subdirectory
 set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -16,19 +17,19 @@ endif()
 
 project(depthai_ctrl)
 
-# pkg-config configurations path.
-if(NOT DEFINED ENV{PKG_CONFIG_PATH})
-  set(ENV{PKG_CONFIG_PATH} "/usr/lib/x86_64-linux-gnu/pkgconfig/")
-else()
-  string(FIND "/usr/lib/x86_64-linux-gnu/pkgconfig/" $ENV{PKG_CONFIG_PATH} POS_INC_PATH)
-  if(${POS_INC_PATH} STREQUAL "-1")
-    set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/lib/x86_64-linux-gnu/pkgconfig/")
-  endif()
-endif()
+# # pkg-config configurations path.
+# if(NOT DEFINED ENV{PKG_CONFIG_PATH})
+#   set(ENV{PKG_CONFIG_PATH} "/usr/lib/x86_64-linux-gnu/pkgconfig/")
+# else()
+#   string(FIND "/usr/lib/x86_64-linux-gnu/pkgconfig/" $ENV{PKG_CONFIG_PATH} POS_INC_PATH)
+#   if(${POS_INC_PATH} STREQUAL "-1")
+#     set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/lib/x86_64-linux-gnu/pkgconfig/")
+#   endif()
+# endif()
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -44,7 +45,11 @@ if(NOT OpenCV_FOUND)
   find_package(OpenCV ${opencv_version} REQUIRED COMPONENTS imgproc highgui)
 endif()
 
-#find_package(ament_cmake REQUIRED)
+find_package(ament_cmake REQUIRED)
+# find_package(libyaml_vendor REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(yaml REQUIRED)
+
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(image_transport REQUIRED)
@@ -54,8 +59,6 @@ find_package(sensor_msgs REQUIRED)
 find_package(stereo_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
-find_package(PkgConfig REQUIRED)
-
 
 find_package(nlohmann_json REQUIRED)
 

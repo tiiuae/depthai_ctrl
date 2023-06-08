@@ -7,3 +7,4 @@
 .gitignore
 **Dockerfile
 **.Dockerfile
+Dockerfile.**
