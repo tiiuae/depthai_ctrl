@@ -4,6 +4,7 @@ on:
   repository_dispatch:
     types: [fog-ros-baseimage-update]
   push:
+  workflow_dispatch:
 
 jobs:
   build:
