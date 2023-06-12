@@ -6,6 +6,22 @@ on:
   repository_dispatch:
     types: [fog-ros-baseimage-update]
   workflow_dispatch:
+    inputs:
+      build_amd64:
+        description: 'Build for AMD64?'
+        required: true
+        default: true
+        type: boolean
+      build_arm64:
+        description: 'Build for ARM64?'
+        required: true
+        default: false
+        type: boolean
+      build_riscv64:
+        description: 'Build for RISCV64?'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -19,10 +35,31 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Determine platforms
+        id: platforms
+        run: |
+          platforms=('amd64' 'arm64' 'riscv64')
+          qemu_platforms=""
+          docker_platforms=""
+          if [[ "${{ github.event_name }}" != 'workflow_dispatch' || "${{ github.event.inputs.build_amd64 }}" == 'true' ]]; then
+            qemu_platforms+="amd64,"
+            docker_platforms+="linux/amd64,"
+          fi
+          if [[ "${{ github.event_name }}" != 'workflow_dispatch' || "${{ github.event.inputs.build_arm64 }}" == 'true' ]]; then
+            qemu_platforms+="arm64,"
+            docker_platforms+="linux/arm64,"
+          fi
+          if [[ "${{ github.event_name }}" != 'workflow_dispatch' || "${{ github.event.inputs.build_riscv64 }}" == 'true' ]]; then
+            qemu_platforms+="riscv64,"
+            docker_platforms+="linux/riscv64,"
+          fi
+          echo "qemu=${qemu_platforms%?}" >> $GITHUB_OUTPUT
+          echo "docker=${docker_platforms%?}" >> $GITHUB_OUTPUT
+
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v2
         with:
-          platforms: amd64,riscv64,arm64
+          platforms: ${{ steps.platforms.outputs.qemu }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -64,7 +101,10 @@ jobs:
         with:
           context: .
           file: Dockerfile.multi-arch
-          platforms: linux/amd64,linux/riscv64,linux/arm64
+          platforms: ${{ steps.platforms.outputs.docker }}
           push: true
+          no-cache: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
