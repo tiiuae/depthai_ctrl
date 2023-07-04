@@ -1,64 +1,34 @@
-FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:sha-62e6243 AS builder
-ARG BUILD_GSTREAMER
-# TODO: not sure how many of these deps are actually needed for building. at least this:
-# libusb-1.0-0-dev
-# gstreamer-1.0 (<-- but not sure which package brings this)
+FROM --platform=${BUILDPLATFORM:-linux/amd64} ghcr.io/tiiuae/fog-ros-sdk:sha-f8defd3-${TARGETARCH:-amd64} AS builder
+ARG TARGETARCH
+
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    libusb-1.0-staticdev \
-    eudev-staticdev \
-    nlohmann-json-dev \
-    yaml-cpp-vendor-dev \
-    cv-bridge-dev \
-    vision-msgs-dev \
-    camera-info-manager-dev \
-    camera-calibration-parsers-dev \
-    xacro-dev \
-    image-transport-dev \
-    libyaml-cpp-dev \
-    libyaml-0-staticdev \
-    libyaml-vendor-dev \
-    libopencv-ts-dev \
-    opencv-staticdev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
-
-RUN if [ -n "$BUILD_GSTREAMER" ]; then \
-    apt-get update -y && apt-get install -y --no-install-recommends \
-    gstreamer1.0-dev \
-    gstreamer1.0-plugins-base-dev \
-    && rm -rf /var/lib/apt/lists/*; \
-    fi
-
 RUN curl https://artifacts.luxonis.com/artifactory/luxonis-depthai-data-local/network/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob \
     -o /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
 
 COPY . /main_ws/src/
 
-RUN if [ -n "$BUILD_GSTREAMER" ]; then \
-    mv /main_ws/src/debian/control.em.gstreamer /main_ws/src/debian/control.em; \
-    fi
+# There is a file at /sdk_install/sysroots/core2-64-oe-linux/usr/include/depthai-shared/common/optional.hpp which has the 
+# which has the line '#include "tl/optional.hpp"', change it to this with sed: '#include "depthai-shared/3rdparty/tl/optional.hpp"'
+RUN YOCTO_TARGET_ARCH=$(/packaging/arch_translation.sh ${TARGETARCH:-amd64}) && \
+    sed -i 's/#include "tl\/optional.hpp"/#include "depthai-shared\/3rdparty\/tl\/optional.hpp"/g' /sdk_install/sysroots/${YOCTO_TARGET_ARCH}-oe-linux/usr/include/depthai-shared/common/optional.hpp && \
+    sed -i 's/#include "tl\/optional.hpp"/#include "depthai-shared\/3rdparty\/tl\/optional.hpp"/g' /sdk_install/sysroots/${YOCTO_TARGET_ARCH}-oe-linux/usr/include/depthai/pipeline/Node.hpp
 
 # CV Bridge cmake file has host contamination, which leads to failure in the build.
 # This hardcoded path will be different for each of the build. So, the sed command should find the place using OpenCV_CONFIG_PATH and OpenCV_INSTALL_PATH tags
-RUN sed -i 's/set(OpenCV_CONFIG_PATH .*)/set(OpenCV_CONFIG_PATH \/usr\/lib\/cmake\/opencv4)/g' /usr/share/cv_bridge/cmake/cv_bridge-extras.cmake && \
-    sed -i 's/set(OpenCV_INSTALL_PATH .*)/set(OpenCV_INSTALL_PATH \/usr)/g' /usr/share/cv_bridge/cmake/cv_bridge-extras.cmake
+RUN YOCTO_TARGET_ARCH=$(/packaging/arch_translation.sh ${TARGETARCH:-amd64}) && \
+    sed -i 's/set(OpenCV_CONFIG_PATH .*)/set(OpenCV_CONFIG_PATH \/sdk_install\/sysroots\/${YOCTO_TARGET_ARCH}-oe-linux\/usr\/lib\/cmake\/opencv4)/g' /sdk_install/sysroots/${YOCTO_TARGET_ARCH}-oe-linux/usr/share/cv_bridge/cmake/cv_bridge-extras.cmake && \
+    sed -i 's/set(OpenCV_INSTALL_PATH .*)/set(OpenCV_INSTALL_PATH \/sdk_install\/sysroots\/${YOCTO_TARGET_ARCH}-oe-linux\/usr)/g' /sdk_install/sysroots/${YOCTO_TARGET_ARCH}-oe-linux/usr/share/cv_bridge/cmake/cv_bridge-extras.cmake
 
-# RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build_colcon.sh
-
-# The rosdep stage in build_colcon.sh is not working for this project. So building with colcon directly.
-# riscv64 needs libatomic because the CPU doesn't have atomic primitives. read more:
-#   https://linuxsoft.cern.ch/cern/centos/7/updates/x86_64/repoview/libatomic.html
 WORKDIR /main_ws
-RUN libatomicIfNeeded="" && \
-    if [ $(uname -m) == riscv64 ]; then \
-        libatomicIfNeeded='-DCMAKE_CXX_FLAGS="-latomic" -DCMAKE_C_FLAGS="-latomic"'; \
-    fi && \
-    colcon build --event-handlers console_direct+ --cmake-args -DBUILD_TESTING=0 -DBUILD_GSTREAMER=$BUILD_GSTREAMER $libatomicIfNeeded
+
+RUN /packaging/build_colcon_sdk.sh ${TARGETARCH:-amd64}
 
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-62e6243
-ARG BUILD_GSTREAMER
+FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-f8defd3
 
 RUN mkdir /depthai_configs
 COPY --from=builder /main_ws/src/params /depthai_configs/.
@@ -87,15 +57,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libyaml-vendor \
     libopencv-ts \
     opencv-staticdev \
+    libdepthai-core20 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN if [ -n "$BUILD_GSTREAMER" ]; then \
-    apt-get update -y && apt-get install -y --no-install-recommends \
-    gstreamer1.0-dev \
-    gstreamer1.0-plugins-base-dev \
-    && rm -rf /var/lib/apt/lists/*; \
-    fi
-
 COPY --from=builder $INSTALL_DIR $INSTALL_DIR
-RUN mkdir /home/root/.hunter
-COPY --from=builder /home/root/.hunter /home/root/.hunter/.

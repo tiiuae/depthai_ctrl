@@ -54,6 +54,10 @@ ENTRYPOINT [ "/entrypoint.sh" ]
 COPY entrypoint.sh /entrypoint.sh
 
 COPY --from=builder /main_ws/ros-*-depthai-ctrl_*_amd64.deb /depthai.deb
+# The multi-arch build has the unnecessary line "/etc/init.d/udev start" for udev rules.
+# Not needed in ubuntu OS baseimage
+RUN sed -i '/\/etc\/init.d\/udev start/d' /entrypoint.sh
+
 # need update because ROS people have a habit of removing old packages pretty fast
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
     libusb-1.0-0-dev \

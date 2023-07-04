@@ -1,21 +1,34 @@
 cmake_minimum_required(VERSION 3.5)
 
+# Without enabling languages, find_package(depthai) fails when it is found in the system
+# It then tries to run find_package(Threads) and that causes an error.
+# Can't define the project(..) here as well, because it then makes hunter to fail
+enable_language(C)
+enable_language(C CXX)
 set(CMAKE_BUILD_TYPE Release)
+
 # all these settings are needed to properly compile depthai-core as subdirectory
 set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
-add_definitions(-DSPDLOG_HEADER_ONLY=1)
-add_definitions(-DFMT_HEADER_ONLY=1)
-set(HUNTER_CONFIGURATION_TYPES ${CMAKE_BUILD_TYPE}) # makes possible to compile also Debug build
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core ${CMAKE_CURRENT_BINARY_DIR}/depthai-core EXCLUDE_FROM_ALL)
+message(STATUS "-*-*-*- trying to find depthai library -*-*-*-")
+find_package(depthai QUIET)
+if(depthai_FOUND)
+  message(STATUS "-*-*-*- depthai found -*-*-*-")
+else()
+  message(STATUS "-*-*-*- depthai not found -*-*-*-")
+  add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
+  add_definitions(-DSPDLOG_HEADER_ONLY=1)
+  add_definitions(-DFMT_HEADER_ONLY=1)
+  set(HUNTER_CONFIGURATION_TYPES ${CMAKE_BUILD_TYPE}) # makes possible to compile also Debug build
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core ${CMAKE_CURRENT_BINARY_DIR}/depthai-core EXCLUDE_FROM_ALL)
+endif()
 
 option(BUILD_GSTREAMER "enable building gstreamer" OFF)
 if(DEFINED ENV{BUILD_GSTREAMER})
   set(BUILD_GSTREAMER "$ENV{BUILD_GSTREAMER}")
 endif()
 
-project(depthai_ctrl)
+project(depthai_ctrl LANGUAGES CXX C)
 
 # # pkg-config configurations path.
 # if(NOT DEFINED ENV{PKG_CONFIG_PATH})
@@ -107,13 +120,13 @@ target_link_libraries(depthai_bridge PUBLIC depthai-core opencv_imgproc opencv_h
 message(STATUS "--------------------------$ENV{ROS_DISTRO} ---")
 message(STATUS $ENV{ROS_DISTRO})
 
-if($ENV{ROS_DISTRO} STREQUAL "galactic" OR ($ENV{ROS_DISTRO} STREQUAL "rolling" AND "${ubuntu_version}" STREQUAL "20.04\n"))
-  target_compile_definitions(depthai_bridge PRIVATE IS_GALACTIC)
-endif()
+# if($ENV{ROS_DISTRO} STREQUAL "galactic" OR ($ENV{ROS_DISTRO} STREQUAL "rolling" AND "${ubuntu_version}" STREQUAL "20.04\n"))
+#   target_compile_definitions(depthai_bridge PRIVATE IS_GALACTIC)
+# endif()
 
-if($ENV{ROS_DISTRO} STREQUAL "humble")
+# if($ENV{ROS_DISTRO} STREQUAL "humble")
   target_compile_definitions(depthai_bridge PRIVATE IS_HUMBLE)
-endif()
+# endif()
 
 # DepthAI Camera as Component library
 add_library(depthai_camera SHARED src/depthai_camera.cpp)
