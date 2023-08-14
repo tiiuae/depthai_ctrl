@@ -31,7 +31,7 @@ RUN /packaging/build_colcon_sdk.sh ${TARGETARCH:-amd64}
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:feat-multiarch-pkcs11
+FROM ghcr.io/tiiuae/fog-ros-baseimage:feat-multiarch-caml
 
 RUN mkdir /depthai_configs
 COPY --from=builder /main_ws/src/params /depthai_configs/.
