@@ -100,7 +100,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: Dockerfile.multi-arch
+          file: Dockerfile
           platforms: ${{ steps.platforms.outputs.docker }}
           push: true
           no-cache: false
