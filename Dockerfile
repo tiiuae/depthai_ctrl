@@ -1,46 +1,37 @@
-FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v2.1.0 AS builder
-ARG BUILD_GSTREAMER
-# TODO: not sure how many of these deps are actually needed for building. at least this:
-# libusb-1.0-0-dev
-# gstreamer-1.0 (<-- but not sure which package brings this)
-RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    libusb-1.0-0-dev \
-    nlohmann-json3-dev \
-    libopencv-dev \
-    && rm -rf /var/lib/apt/lists/*
+FROM --platform=${BUILDPLATFORM:-linux/amd64} ghcr.io/tiiuae/fog-ros-sdk:sha-6d67ecf-${TARGETARCH:-amd64} AS builder
 
-RUN if [ -n "$BUILD_GSTREAMER" ]; then \
-    apt-get update -y && apt-get install -y --no-install-recommends \
-    libgstreamer1.0-0 \
-    libgstreamer-plugins-base1.0-dev \
-    libgstreamer-plugins-bad1.0-dev \
-    libgstreamer-plugins-good1.0-dev \
-    libgstrtspserver-1.0-dev \
-    libgstreamer-plugins-base1.0-0 \
-    libgstreamer-plugins-good1.0-0 \
-    gstreamer1.0-x \
-    && rm -rf /var/lib/apt/lists/*; \
-    fi
+ARG TARGETARCH
+
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN curl https://artifacts.luxonis.com/artifactory/luxonis-depthai-data-local/network/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob \
     -o /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob
 
 COPY . /main_ws/src/
 
-RUN if [ -n "$BUILD_GSTREAMER" ]; then \
-    mv /main_ws/src/debian/control.em.gstreamer /main_ws/src/debian/control.em; \
-    fi
+# There is a file at /sdk_install/sysroots/core2-64-oe-linux/usr/include/depthai-shared/common/optional.hpp which has the 
+# which has the line '#include "tl/optional.hpp"', change it to this with sed: '#include "depthai-shared/3rdparty/tl/optional.hpp"'
+RUN YOCTO_TARGET_ARCH=$(/packaging/arch_translation.sh ${TARGETARCH:-amd64}) && \
+    sed -i 's/#include "tl\/optional.hpp"/#include "depthai-shared\/3rdparty\/tl\/optional.hpp"/g' /sdk_install/sysroots/${YOCTO_TARGET_ARCH}-oe-linux/usr/include/depthai-shared/common/optional.hpp && \
+    sed -i 's/#include "tl\/optional.hpp"/#include "depthai-shared\/3rdparty\/tl\/optional.hpp"/g' /sdk_install/sysroots/${YOCTO_TARGET_ARCH}-oe-linux/usr/include/depthai/pipeline/Node.hpp
 
-# this:
-# 1) builds the application
-# 2) packages the application as .deb in /main_ws/
-RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build.sh
+# CV Bridge cmake file has host contamination, which leads to failure in the build.
+# This hardcoded path will be different for each of the build. So, the sed command should find the place using OpenCV_CONFIG_PATH and OpenCV_INSTALL_PATH tags
+RUN YOCTO_TARGET_ARCH=$(/packaging/arch_translation.sh ${TARGETARCH:-amd64}) && \
+    sed -i 's/set(OpenCV_CONFIG_PATH .*)/set(OpenCV_CONFIG_PATH \/sdk_install\/sysroots\/${YOCTO_TARGET_ARCH}-oe-linux\/usr\/lib\/cmake\/opencv4)/g' /sdk_install/sysroots/${YOCTO_TARGET_ARCH}-oe-linux/usr/share/cv_bridge/cmake/cv_bridge-extras.cmake && \
+    sed -i 's/set(OpenCV_INSTALL_PATH .*)/set(OpenCV_INSTALL_PATH \/sdk_install\/sysroots\/${YOCTO_TARGET_ARCH}-oe-linux\/usr)/g' /sdk_install/sysroots/${YOCTO_TARGET_ARCH}-oe-linux/usr/share/cv_bridge/cmake/cv_bridge-extras.cmake
+
+WORKDIR /main_ws
+
+RUN /packaging/build_colcon_sdk.sh ${TARGETARCH:-amd64}
 
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.1.0
-ARG BUILD_GSTREAMER
+FROM ghcr.io/tiiuae/fog-ros-baseimage:sha-6d67ecf
 
 RUN mkdir /depthai_configs
 COPY --from=builder /main_ws/src/params /depthai_configs/.
@@ -53,33 +44,24 @@ ENTRYPOINT [ "/entrypoint.sh" ]
 
 COPY entrypoint.sh /entrypoint.sh
 
-COPY --from=builder /main_ws/ros-*-depthai-ctrl_*_amd64.deb /depthai.deb
-# The multi-arch build has the unnecessary line "/etc/init.d/udev start" for udev rules.
-# Not needed in ubuntu OS baseimage
-RUN sed -i '/\/etc\/init.d\/udev start/d' /entrypoint.sh
-
-# need update because ROS people have a habit of removing old packages pretty fast
-RUN apt-get update -y && apt-get install -y --no-install-recommends \
-    libusb-1.0-0-dev \
-    libopencv-dev \
-    ros-${ROS_DISTRO}-vision-msgs \
-    ros-${ROS_DISTRO}-camera-info-manager \
-    ros-${ROS_DISTRO}-cv-bridge \
-    ros-${ROS_DISTRO}-robot-state-publisher \
-    ros-${ROS_DISTRO}-image-transport \
-    ros-$ROS_DISTRO-xacro \
+RUN apt update \
+    && apt install -y --no-install-recommends \
+        libusb-1.0-0 \
+        eudev-staticdev \
+        nlohmann-json-dev \
+        yaml-cpp-vendor \
+        cv-bridge \
+        vision-msgs \
+        camera-info-manager \
+        camera-calibration-parsers \
+        xacro \
+        image-transport \
+        libyaml-cpp0.6 \
+        libyaml-0-staticdev \
+        libyaml-vendor \
+        libopencv-ts \
+        opencv-staticdev \
+        libdepthai-core20 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN if [ -n "$BUILD_GSTREAMER" ]; then \
-    apt-get update -y && apt-get install -y --no-install-recommends \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-plugins-ugly \
-    gir1.2-gst-rtsp-server-1.0 \
-    gstreamer1.0-libav \
-    gstreamer1.0-rtsp \
-    && rm -rf /var/lib/apt/lists/*; \
-    fi
-
-RUN ln -s /usr/bin/true /usr/bin/udevadm \
-    && dpkg -i /depthai.deb && rm /depthai.deb \
-    && rm -f /usr/bin/udevadm
+COPY --from=builder $INSTALL_DIR $INSTALL_DIR

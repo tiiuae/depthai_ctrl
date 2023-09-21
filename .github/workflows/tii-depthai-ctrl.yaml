@@ -3,8 +3,6 @@ name: tii-depthai-ctrl
 on:
   push:
   pull_request:
-  repository_dispatch:
-    types: [fog-ros-baseimage-update]
   workflow_dispatch:
     inputs:
       build_amd64:
@@ -31,30 +29,45 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Determine platforms
         id: platforms
         run: |
-          platforms=('amd64' 'arm64' 'riscv64')
           qemu_platforms=""
           docker_platforms=""
-          if [[ "${{ github.event_name }}" != 'workflow_dispatch' || "${{ github.event.inputs.build_amd64 }}" == 'true' ]]; then
-            qemu_platforms+="amd64,"
-            docker_platforms+="linux/amd64,"
+          default_branch="${{ github.event.repository.default_branch }}"
+
+          matrix_list=()
+
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/$default_branch" ]]; then
+            matrix_list=("amd64" "arm64" "riscv64")
+          elif [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "$default_branch" ]]; then
+            matrix_list=("amd64" "arm64" "riscv64")
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.build_amd64 }}" == 'true' ]]; then
+            matrix_list+=("amd64")
+            fi
+            if [[ "${{ github.event.inputs.build_arm64 }}" == 'true' ]]; then
+            matrix_list+=("arm64")
+            fi
+            if [[ "${{ github.event.inputs.build_riscv64 }}" == 'true' ]]; then
+            matrix_list+=("riscv64")
+            fi
+          else
+            # Maybe push or some other trigger
+            matrix_list=("amd64")
           fi
-          if [[ "${{ github.event_name }}" != 'workflow_dispatch' || "${{ github.event.inputs.build_arm64 }}" == 'true' ]]; then
-            qemu_platforms+="arm64,"
-            docker_platforms+="linux/arm64,"
-          fi
-          if [[ "${{ github.event_name }}" != 'workflow_dispatch' || "${{ github.event.inputs.build_riscv64 }}" == 'true' ]]; then
-            qemu_platforms+="riscv64,"
-            docker_platforms+="linux/riscv64,"
-          fi
+          for platform in "${matrix_list[@]}"; do
+            qemu_platforms+="$platform,"
+            docker_platforms+="linux/$platform,"
+          done
+
           echo "qemu=${qemu_platforms%?}" >> $GITHUB_OUTPUT
           echo "docker=${docker_platforms%?}" >> $GITHUB_OUTPUT
+          echo "Building for $qemu_platforms"
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v2
@@ -62,7 +75,7 @@ jobs:
           platforms: ${{ steps.platforms.outputs.qemu }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Set image tag format without suffix
         run: |
@@ -79,7 +92,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           images: ghcr.io/tiiuae/tii-depthai-ctrl
           tags: |
@@ -90,17 +103,17 @@ jobs:
             type=raw,value=latest,enable=${{ endsWith(github.ref, github.event.repository.default_branch) }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build container image and push
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile.multi-arch
+          file: Dockerfile
           platforms: ${{ steps.platforms.outputs.docker }}
           push: true
           no-cache: false
