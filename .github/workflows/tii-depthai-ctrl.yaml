@@ -6,17 +6,17 @@ on:
   workflow_dispatch:
     inputs:
       build_amd64:
-        description: 'Build for AMD64?'
+        description: 'Build for AMD64'
         required: true
         default: true
         type: boolean
       build_arm64:
-        description: 'Build for ARM64?'
+        description: 'Build for ARM64'
         required: true
         default: false
         type: boolean
       build_riscv64:
-        description: 'Build for RISCV64?'
+        description: 'Build for RISCV64'
         required: true
         default: false
         type: boolean
@@ -70,7 +70,7 @@ jobs:
           echo "Building for $qemu_platforms"
 
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: ${{ steps.platforms.outputs.qemu }}
 
