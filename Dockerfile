@@ -39,7 +39,7 @@ RUN BUILD_GSTREAMER=$BUILD_GSTREAMER /packaging/build.sh
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:v2.1.0
+FROM ghcr.io/tiiuae/fog-ros-baseimage:v3.0.0
 ARG BUILD_GSTREAMER
 
 RUN mkdir /depthai_configs
