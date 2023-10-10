@@ -63,7 +63,7 @@ jobs:
             matrix_json+="{\"platform\":\"$platform\"},"
           done
           matrix_json="${matrix_json%,}]}"
-          echo "::set-output name=matrix::$matrix_json"
+          echo "matrix=${matrix_json}" >> $GITHUB_OUTPUT
           echo $matrix_json
 
   build:
@@ -137,7 +137,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
 
