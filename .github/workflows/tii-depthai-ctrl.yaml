@@ -1,56 +1,162 @@
 name: tii-depthai-ctrl
 
 on:
-  repository_dispatch:
-    types: [fog-ros-baseimage-update]
   push:
+  pull_request:
   workflow_dispatch:
+    inputs:
+      build_amd64:
+        description: 'Build for AMD64'
+        required: true
+        default: true
+        type: boolean
+      build_arm64:
+        description: 'Build for ARM64'
+        required: true
+        default: false
+        type: boolean
+      build_riscv64:
+        description: 'Build for RISCV64'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY_IMAGE: ghcr.io/tiiuae/tii-depthai-ctrl
 
 jobs:
-  build:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v3
+      - id: set-matrix
+        run: |
+          default_branch="${{ github.event.repository.default_branch }}"
+          matrix_list=()
+
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/$default_branch" ]]; then
+            matrix_list=("amd64" "arm64" "riscv64")
+          elif [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "$default_branch" ]]; then
+            matrix_list=("amd64" "arm64" "riscv64")
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.build_amd64 }}" == 'true' ]]; then
+            matrix_list+=("amd64")
+            fi
+            if [[ "${{ github.event.inputs.build_arm64 }}" == 'true' ]]; then
+            matrix_list+=("arm64")
+            fi
+            if [[ "${{ github.event.inputs.build_riscv64 }}" == 'true' ]]; then
+            matrix_list+=("riscv64")
+            fi
+          else
+            # Maybe push or some other trigger
+            matrix_list=("amd64")
+          fi
+
+          matrix_json="{\"include\": ["
+          for platform in "${matrix_list[@]}"; do
+            matrix_json+="{\"platform\":\"$platform\"},"
+          done
+          matrix_json="${matrix_json%,}]}"
+          echo "::set-output name=matrix::$matrix_json"
+          echo $matrix_json
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{fromJson(needs.prepare.outputs.matrix)}}
+    outputs:
+      short_git_sha: ${{ steps.vars.outputs.SHORT_GIT_SHA }}
+    steps:
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: docker/setup-buildx-action@v2
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.platform }}
 
-      - name: Set image tag format without suffix
-        run: |
-          echo "IMAGE_TAG_FORMAT=type=sha" >> $GITHUB_ENV
-        if: github.event_name == 'push'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Set image tag format with suffix
-        # it is possible that run_number should be used instead run_attempt
-        # run_attempt is unique number on every run and run_attempt resets to 1 if re-build is not used
-        # content of image_sha_tag_suffix is defined in fog-ros-baseimage dispatcher workflow.
+      - name: Set short git commit SHA
+        id: vars
         run: |
-          echo "IMAGE_TAG_FORMAT=type=sha,suffix=-${{ github.event.client_payload.image_sha_tag_suffix }}" >> $GITHUB_ENV
-        if: github.event_name == 'repository_dispatch'
+          calculatedSha=$(git rev-parse --short ${{ github.sha }})
+          echo "SHORT_GIT_SHA=$calculatedSha" >> $GITHUB_OUTPUT
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/tiiuae/tii-depthai-ctrl
+          images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=raw,value=latest
-            ${{ env.IMAGE_TAG_FORMAT }}
+            type=ref,event=branch,suffix=-${{ matrix.platform }}
+            type=ref,event=pr,suffix=-${{ matrix.platform }}
+            type=semver,pattern={{version}},suffix=-${{ matrix.platform }}
+            type=sha,suffix=-${{ matrix.platform }}
+            type=raw,value=latest,enable=${{ endsWith(github.ref, github.event.repository.default_branch) && matrix.platform == 'amd64' }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build container image and push
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile
+          platforms: linux/${{ matrix.platform }}
+          pull: true
           push: true
+          no-cache: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+
+  merge:
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - build
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create combined image
+        run : |
+            AMEND_LIST=""
+            for platform in $(echo '${{ needs.prepare.outputs.matrix }}' | jq -r '.include[].platform'); do
+              echo "Adding ${{ env.REGISTRY_IMAGE }}:sha-${{ needs.build.outputs.short_git_sha }}-$platform to the amend list"
+              AMEND_LIST+="--amend ${{ env.REGISTRY_IMAGE }}:sha-${{ needs.build.outputs.short_git_sha }}-$platform "
+            done
+            docker manifest create ${{ env.REGISTRY_IMAGE }}:sha-${{ needs.build.outputs.short_git_sha }} $AMEND_LIST
+
+      - name: Push image to the registry
+        run: |
+          docker manifest push ${{ env.REGISTRY_IMAGE }}:sha-${{ needs.build.outputs.short_git_sha }}

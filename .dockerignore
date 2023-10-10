@@ -3,7 +3,9 @@
 
 .circleci/
 .vscode/
+.github/
 .dockerignore
 .gitignore
 **Dockerfile
 **.Dockerfile
+Dockerfile.**

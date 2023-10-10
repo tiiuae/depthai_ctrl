@@ -1,34 +1,48 @@
 cmake_minimum_required(VERSION 3.5)
 
+# Without enabling languages, find_package(depthai) fails when it is found in the system
+# It then tries to run find_package(Threads) and that causes an error.
+# Can't define the project(..) here as well, because it then makes hunter to fail
+enable_language(C)
+enable_language(C CXX)
+set(CMAKE_BUILD_TYPE Release)
+
 # all these settings are needed to properly compile depthai-core as subdirectory
 set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
-add_definitions(-DSPDLOG_HEADER_ONLY=1)
-add_definitions(-DFMT_HEADER_ONLY=1)
-set(HUNTER_CONFIGURATION_TYPES ${CMAKE_BUILD_TYPE}) # makes possible to compile also Debug build
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core ${CMAKE_CURRENT_BINARY_DIR}/depthai-core EXCLUDE_FROM_ALL)
+message(STATUS "-*-*-*- trying to find depthai library -*-*-*-")
+find_package(depthai QUIET)
+if(depthai_FOUND)
+  message(STATUS "-*-*-*- depthai found -*-*-*-")
+else()
+  message(STATUS "-*-*-*- depthai not found -*-*-*-")
+  add_definitions(-DSPDLOG_ACTIVE_LEVEL=6)
+  add_definitions(-DSPDLOG_HEADER_ONLY=1)
+  add_definitions(-DFMT_HEADER_ONLY=1)
+  set(HUNTER_CONFIGURATION_TYPES ${CMAKE_BUILD_TYPE}) # makes possible to compile also Debug build
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core ${CMAKE_CURRENT_BINARY_DIR}/depthai-core EXCLUDE_FROM_ALL)
+endif()
 
 option(BUILD_GSTREAMER "enable building gstreamer" OFF)
 if(DEFINED ENV{BUILD_GSTREAMER})
   set(BUILD_GSTREAMER "$ENV{BUILD_GSTREAMER}")
 endif()
 
-project(depthai_ctrl)
+project(depthai_ctrl LANGUAGES CXX C)
 
-# pkg-config configurations path.
-if(NOT DEFINED ENV{PKG_CONFIG_PATH})
-  set(ENV{PKG_CONFIG_PATH} "/usr/lib/x86_64-linux-gnu/pkgconfig/")
-else()
-  string(FIND "/usr/lib/x86_64-linux-gnu/pkgconfig/" $ENV{PKG_CONFIG_PATH} POS_INC_PATH)
-  if(${POS_INC_PATH} STREQUAL "-1")
-    set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/lib/x86_64-linux-gnu/pkgconfig/")
-  endif()
-endif()
+# # pkg-config configurations path.
+# if(NOT DEFINED ENV{PKG_CONFIG_PATH})
+#   set(ENV{PKG_CONFIG_PATH} "/usr/lib/x86_64-linux-gnu/pkgconfig/")
+# else()
+#   string(FIND "/usr/lib/x86_64-linux-gnu/pkgconfig/" $ENV{PKG_CONFIG_PATH} POS_INC_PATH)
+#   if(${POS_INC_PATH} STREQUAL "-1")
+#     set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/lib/x86_64-linux-gnu/pkgconfig/")
+#   endif()
+# endif()
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -44,7 +58,11 @@ if(NOT OpenCV_FOUND)
   find_package(OpenCV ${opencv_version} REQUIRED COMPONENTS imgproc highgui)
 endif()
 
-#find_package(ament_cmake REQUIRED)
+find_package(ament_cmake REQUIRED)
+# find_package(libyaml_vendor REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(yaml REQUIRED)
+
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(image_transport REQUIRED)
@@ -54,8 +72,6 @@ find_package(sensor_msgs REQUIRED)
 find_package(stereo_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
-find_package(PkgConfig REQUIRED)
-
 
 find_package(nlohmann_json REQUIRED)
 
@@ -104,13 +120,13 @@ target_link_libraries(depthai_bridge PUBLIC depthai-core opencv_imgproc opencv_h
 message(STATUS "--------------------------$ENV{ROS_DISTRO} ---")
 message(STATUS $ENV{ROS_DISTRO})
 
-if($ENV{ROS_DISTRO} STREQUAL "galactic" OR ($ENV{ROS_DISTRO} STREQUAL "rolling" AND "${ubuntu_version}" STREQUAL "20.04\n"))
-  target_compile_definitions(depthai_bridge PRIVATE IS_GALACTIC)
-endif()
+# if($ENV{ROS_DISTRO} STREQUAL "galactic" OR ($ENV{ROS_DISTRO} STREQUAL "rolling" AND "${ubuntu_version}" STREQUAL "20.04\n"))
+#   target_compile_definitions(depthai_bridge PRIVATE IS_GALACTIC)
+# endif()
 
-if($ENV{ROS_DISTRO} STREQUAL "humble")
+# if($ENV{ROS_DISTRO} STREQUAL "humble")
   target_compile_definitions(depthai_bridge PRIVATE IS_HUMBLE)
-endif()
+# endif()
 
 # DepthAI Camera as Component library
 add_library(depthai_camera SHARED src/depthai_camera.cpp)

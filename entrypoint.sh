@@ -8,7 +8,7 @@ _term() {
         pattern="depthai_ctrl/camera_node"
     fi
 
-    pid_value="$(ps -ax | grep $pattern | grep -v grep | awk '{ print $1 }')"
+    pid_value="$(ps -e | grep $pattern | grep -v grep | awk '{ print $1 }')"
     if [ "$pid_value" != "" ]; then
         pid=$pid_value
         echo "Send SIGINT to pid $pid"
@@ -49,7 +49,11 @@ fi
 if [ "${USE_AUTO_FOCUS}" = "1" ]; then
     ROS_FLAGS="${ROS_FLAGS} use_auto_focus:=true"
 fi
-
+# This is required for multiarch images. Without this udev start, depthai library fails to find XLink connection to device.
+# The reason is that depthai camera switches to onboard processor when initialized, and causing USB device name changed.
+# Old version with ubuntu base worked OK for hotplug, but this one does not.
+# This could cause problem on the host machine, causing some USB devices to disconnect and require a unplug-replug.
+/etc/init.d/udev start
 mode="${1}"
 if [ "${mode}" = "gstreamer" ]; then
     ros-with-env ros2 run depthai_ctrl gstreamer_node \
