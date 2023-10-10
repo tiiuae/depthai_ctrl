@@ -33,17 +33,6 @@ RUN /packaging/build_colcon_sdk.sh ${TARGETARCH:-amd64}
 
 FROM ghcr.io/tiiuae/fog-ros-baseimage:v3.0.1
 
-RUN mkdir /depthai_configs
-COPY --from=builder /main_ws/src/params /depthai_configs/.
-COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_configs/.
-
-VOLUME /depthai_configs
-ENV DEPTHAI_PARAM_FILE /depthai_configs/parameters.yaml
-
-ENTRYPOINT [ "/entrypoint.sh" ]
-
-COPY entrypoint.sh /entrypoint.sh
-
 RUN apt update \
     && apt install -y --no-install-recommends \
         libusb-1.0-0 \
@@ -63,5 +52,16 @@ RUN apt update \
         opencv-staticdev \
         libdepthai-core20 \
     && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir /depthai_configs
+COPY --from=builder /main_ws/src/params /depthai_configs/.
+COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_configs/.
+
+VOLUME /depthai_configs
+ENV DEPTHAI_PARAM_FILE /depthai_configs/parameters.yaml
+
+ENTRYPOINT [ "/entrypoint.sh" ]
+
+COPY entrypoint.sh /entrypoint.sh
 
 COPY --from=builder $INSTALL_DIR $INSTALL_DIR

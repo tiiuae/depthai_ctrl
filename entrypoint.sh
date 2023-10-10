@@ -49,6 +49,10 @@ fi
 if [ "${USE_AUTO_FOCUS}" = "1" ]; then
     ROS_FLAGS="${ROS_FLAGS} use_auto_focus:=true"
 fi
+# This is required for multiarch images. Without this udev start, depthai library fails to find XLink connection to device.
+# The reason is that depthai camera switches to onboard processor when initialized, and causing USB device name changed.
+# Old version with ubuntu base worked OK for hotplug, but this one does not.
+# This could cause problem on the host machine, causing some USB devices to disconnect and require a unplug-replug.
 /etc/init.d/udev start
 mode="${1}"
 if [ "${mode}" = "gstreamer" ]; then
