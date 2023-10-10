@@ -25,21 +25,18 @@ permissions:
   contents: read
   packages: write
 
+env:
+  REGISTRY_IMAGE: ghcr.io/tiiuae/tii-depthai-ctrl
+
 jobs:
-  build:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Determine platforms
-        id: platforms
+      - id: set-matrix
         run: |
-          qemu_platforms=""
-          docker_platforms=""
           default_branch="${{ github.event.repository.default_branch }}"
-
           matrix_list=()
 
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/$default_branch" ]]; then
@@ -60,34 +57,52 @@ jobs:
             # Maybe push or some other trigger
             matrix_list=("amd64")
           fi
-          for platform in "${matrix_list[@]}"; do
-            qemu_platforms+="$platform,"
-            docker_platforms+="linux/$platform,"
-          done
 
-          echo "qemu=${qemu_platforms%?}" >> $GITHUB_OUTPUT
-          echo "docker=${docker_platforms%?}" >> $GITHUB_OUTPUT
-          echo "Building for $qemu_platforms"
+          matrix_json="{\"include\": ["
+          for platform in "${matrix_list[@]}"; do
+            matrix_json+="{\"platform\":\"$platform\"},"
+          done
+          matrix_json="${matrix_json%,}]}"
+          echo "::set-output name=matrix::$matrix_json"
+          echo $matrix_json
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{fromJson(needs.prepare.outputs.matrix)}}
+    outputs:
+      short_git_sha: ${{ steps.vars.outputs.SHORT_GIT_SHA }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: ${{ steps.platforms.outputs.qemu }}
+          platforms: ${{ matrix.platform }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Set short git commit SHA
+        id: vars
+        run: |
+          calculatedSha=$(git rev-parse --short ${{ github.sha }})
+          echo "SHORT_GIT_SHA=$calculatedSha" >> $GITHUB_OUTPUT
 
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/tiiuae/tii-depthai-ctrl
+          images: ${{ env.REGISTRY_IMAGE }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=sha
-            type=raw,value=latest,enable=${{ endsWith(github.ref, github.event.repository.default_branch) }}
+            type=ref,event=branch,suffix=-${{ matrix.platform }}
+            type=ref,event=pr,suffix=-${{ matrix.platform }}
+            type=semver,pattern={{version}},suffix=-${{ matrix.platform }}
+            type=sha,suffix=-${{ matrix.platform }}
+            type=raw,value=latest,enable=${{ endsWith(github.ref, github.event.repository.default_branch) && matrix.platform == 'amd64' }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -101,10 +116,47 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          platforms: ${{ steps.platforms.outputs.docker }}
+          platforms: linux/${{ matrix.platform }}
+          pull: true
           push: true
           no-cache: false
           cache-from: type=gha
-          cache-to: type=gha,mode=min
+          cache-to: type=gha,mode=max
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+
+  merge:
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - build
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create combined image
+        run : |
+            AMEND_LIST=""
+            for platform in $(echo '${{ needs.prepare.outputs.matrix }}' | jq -r '.include[].platform'); do
+              echo "Adding ${{ env.REGISTRY_IMAGE }}:sha-${{ needs.build.outputs.short_git_sha }}-$platform to the amend list"
+              AMEND_LIST+="--amend ${{ env.REGISTRY_IMAGE }}:sha-${{ needs.build.outputs.short_git_sha }}-$platform "
+            done
+            docker manifest create ${{ env.REGISTRY_IMAGE }}:sha-${{ needs.build.outputs.short_git_sha }} $AMEND_LIST
+
+      - name: Push image to the registry
+        run: |
+          docker manifest push ${{ env.REGISTRY_IMAGE }}:sha-${{ needs.build.outputs.short_git_sha }}
