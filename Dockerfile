@@ -51,7 +51,8 @@ RUN apt update \
         libopencv-ts \
         opencv-staticdev \
         libdepthai-core20 \
-	gdb \
+        binutils-dev \
+        backward-ros \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /depthai_configs
@@ -66,3 +67,7 @@ ENTRYPOINT [ "/entrypoint.sh" ]
 COPY entrypoint.sh /entrypoint.sh
 
 COPY --from=builder $INSTALL_DIR $INSTALL_DIR
+
+COPY --from=builder $WORKSPACE_DIR/src $WORKSPACE_DIR/src
+RUN ls -la $WORKSPACE_DIR/src
+RUN ls -la $WORKSPACE_DIR
