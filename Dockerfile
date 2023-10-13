@@ -51,6 +51,7 @@ RUN apt update \
         libopencv-ts \
         opencv-staticdev \
         libdepthai-core20 \
+	gdb \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /depthai_configs
