@@ -30,7 +30,9 @@ int main(int argc, char * argv[])
   std::cout << "DepthAI Camera Node." << std::endl;
   rclcpp::executors::MultiThreadedExecutor exec;
   rclcpp::NodeOptions options;
+  std::cout << "DepthAICamera in" << std::endl;
   auto cameraNode = std::make_shared<DepthAICamera>();
+  std::cout << "DepthAICamera out" << std::endl;
   exec.add_node(cameraNode);
   exec.spin();
 
