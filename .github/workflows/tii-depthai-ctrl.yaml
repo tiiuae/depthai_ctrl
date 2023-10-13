@@ -2,6 +2,7 @@ name: tii-depthai-ctrl
 
 on:
   push:
+    branches: [main, saluki_depthai_debug]
   pull_request:
   workflow_dispatch:
     inputs:
