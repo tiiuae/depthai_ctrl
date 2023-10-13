@@ -53,22 +53,22 @@ void DepthAICamera::Initialize()
   const std::string stream_control_topic = get_parameter("stream_control_topic").as_string();*/
   _nn_directory = get_parameter("nn_directory").as_string();
 
-//  _left_publisher = create_publisher<ImageMsg>("camera/left/image_raw", 10);
-//  _right_publisher = create_publisher<ImageMsg>("camera/right/image_raw", 10);
-//  _color_publisher = create_publisher<ImageMsg>("camera/color/image_raw", 10);
-//  _camera_info_publisher = create_publisher<CameraInfoMsg>("camera/color/camera_info", 10);
-//  _depth_publisher = create_publisher<ImageMsg>("camera/depth/image_raw", 10);
-//  _passthrough_publisher = create_publisher<ImageMsg>("camera/color/image_passthrough", 10);
+  _left_publisher = create_publisher<ImageMsg>("camera/left/image_raw", 10);
+  _right_publisher = create_publisher<ImageMsg>("camera/right/image_raw", 10);
+  _color_publisher = create_publisher<ImageMsg>("camera/color/image_raw", 10);
+  _camera_info_publisher = create_publisher<CameraInfoMsg>("camera/color/camera_info", 10);
+  _depth_publisher = create_publisher<ImageMsg>("camera/depth/image_raw", 10);
+  _passthrough_publisher = create_publisher<ImageMsg>("camera/color/image_passthrough", 10);
 
-//  _detection_roi_publisher = create_publisher<vision_msgs::msg::Detection2DArray>(
-//    "camera/detections", 10);
+  _detection_roi_publisher = create_publisher<vision_msgs::msg::Detection2DArray>(
+    "camera/detections", 10);
 
   _video_publisher = create_publisher<CompressedImageMsg>(
     "camera/color/video", 10);
 
-//  _stream_command_subscriber = create_subscription<std_msgs::msg::String>(
-//    "camera/videostreamcmd", rclcpp::QoS(10).reliable(),
-//    std::bind(&DepthAICamera::VideoStreamCommand, this, _1));
+  _stream_command_subscriber = create_subscription<std_msgs::msg::String>(
+    "camera/videostreamcmd", rclcpp::QoS(10).reliable(),
+    std::bind(&DepthAICamera::VideoStreamCommand, this, _1));
 
   _auto_focus_timer =
     this->create_wall_timer(
