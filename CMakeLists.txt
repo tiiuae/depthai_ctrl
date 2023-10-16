@@ -5,7 +5,8 @@ cmake_minimum_required(VERSION 3.5)
 # Can't define the project(..) here as well, because it then makes hunter to fail
 enable_language(C)
 enable_language(C CXX)
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
+set(CMAKE_BUILD_TYPE Debug)
+add_compile_options(-g)
 
 # all these settings are needed to properly compile depthai-core as subdirectory
 set(BUILD_SHARED_LIBS OFF)
@@ -73,7 +74,6 @@ find_package(stereo_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
 find_package(backward_ros REQUIRED)
-add_compile_options(-g)
 
 find_package(nlohmann_json REQUIRED)
 

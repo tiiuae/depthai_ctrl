@@ -485,50 +485,62 @@ void DepthAICamera::TryRestarting()
   RCLCPP_INFO(this->get_logger(), "[%s]: Initializing DepthAI camera...", get_name());
   for (int i = 0; i < 5 && !_device; i++) {
     try {
+      RCLCPP_INFO(this->get_logger(), "[%s]: Trying camera initialization...", get_name());
       _device = std::make_shared<dai::Device>(*_pipeline, !_useUSB3);
     } catch (const std::runtime_error & err) {
       RCLCPP_ERROR(get_logger(), "Cannot start DepthAI camera: %s", err.what());
       _device.reset();
     }
   }
+  RCLCPP_INFO(this->get_logger(), "[%s]: Checking if initialization of '_device' is done...", get_name());
   if (!_device) {
     return;
   }
+  RCLCPP_INFO(this->get_logger(), "[%s]: Initialized camera. Reading calibration...", get_name());
+  try {
+    _calibrationHandler = _device->readCalibration();
+    RCLCPP_INFO(this->get_logger(), "[%s]: Calibration read from camera. RGB conventer ", get_name());
+    dai::rosBridge::ImageConverter rgbConverter(_color_camera_frame, true);
+    sensor_msgs::msg::CameraInfo rgbCameraInfo = rgbConverter.calibrationToCameraInfo(
+      _calibrationHandler, dai::CameraBoardSocket::RGB, _videoWidth, _videoHeight);
+    RCLCPP_INFO(this->get_logger(), "[%s]: Parsing the RGB camera info...", get_name());
+    _rgb_camera_info = std::make_unique<sensor_msgs::msg::CameraInfo>(rgbCameraInfo);
 
-  _calibrationHandler = _device->readCalibration();
+    // print camerainfo
+    RCLCPP_INFO(this->get_logger(), "[%s]: CameraInfo:", get_name());
+    RCLCPP_INFO(this->get_logger(), "[%s]:   width: %d", get_name(), rgbCameraInfo.width);
+    RCLCPP_INFO(this->get_logger(), "[%s]:   height: %d", get_name(), rgbCameraInfo.height);
+    RCLCPP_INFO(
+      this->get_logger(), "[%s]:   distortion_model: %s",
+      get_name(), rgbCameraInfo.distortion_model.c_str());
+    RCLCPP_INFO(
+      this->get_logger(), "[%s]:   D: [%f, %f, %f, %f, %f]",
+      get_name(), rgbCameraInfo.d[0], rgbCameraInfo.d[1], rgbCameraInfo.d[2], rgbCameraInfo.d[3],
+      rgbCameraInfo.d[4]);
+    RCLCPP_INFO(
+      this->get_logger(), "[%s]:   K: [%f, %f, %f, %f, %f, %f, %f, %f, %f]",
+      get_name(), rgbCameraInfo.k[0], rgbCameraInfo.k[1], rgbCameraInfo.k[2], rgbCameraInfo.k[3],
+      rgbCameraInfo.k[4], rgbCameraInfo.k[5], rgbCameraInfo.k[6], rgbCameraInfo.k[7],
+      rgbCameraInfo.k[8]);
+    RCLCPP_INFO(
+      this->get_logger(), "[%s]:   R: [%f, %f, %f, %f, %f, %f, %f, %f, %f]",
+      get_name(), rgbCameraInfo.r[0], rgbCameraInfo.r[1], rgbCameraInfo.r[2], rgbCameraInfo.r[3],
+      rgbCameraInfo.r[4], rgbCameraInfo.r[5], rgbCameraInfo.r[6], rgbCameraInfo.r[7],
+      rgbCameraInfo.r[8]);
+    RCLCPP_INFO(
+      this->get_logger(), "[%s]:   P: [%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]",
+      get_name(), rgbCameraInfo.p[0], rgbCameraInfo.p[1], rgbCameraInfo.p[2], rgbCameraInfo.p[3],
+      rgbCameraInfo.p[4], rgbCameraInfo.p[5], rgbCameraInfo.p[6], rgbCameraInfo.p[7],
+      rgbCameraInfo.p[8], rgbCameraInfo.p[9], rgbCameraInfo.p[10], rgbCameraInfo.p[11]);
+  } catch (std::bad_alloc const&) {
+    RCLCPP_WARN(this->get_logger(), "[%s]: Bad alloc exception while reading calibration", get_name());
+  } catch (std::exception const& e) {
+    RCLCPP_WARN(this->get_logger(), "[%s]: Exception while reading calibration: %s", get_name(), e.what());
+  } catch (...) {
+    RCLCPP_WARN(this->get_logger(), "[%s]: Unknown exception while reading calibration", get_name());
+  }
 
-  dai::rosBridge::ImageConverter rgbConverter(_color_camera_frame, true);
-  sensor_msgs::msg::CameraInfo rgbCameraInfo = rgbConverter.calibrationToCameraInfo(
-    _calibrationHandler, dai::CameraBoardSocket::RGB, _videoWidth, _videoHeight);
-  _rgb_camera_info = std::make_unique<sensor_msgs::msg::CameraInfo>(rgbCameraInfo);
-
-  // print camerainfo
-  RCLCPP_INFO(this->get_logger(), "[%s]: CameraInfo:", get_name());
-  RCLCPP_INFO(this->get_logger(), "[%s]:   width: %d", get_name(), rgbCameraInfo.width);
-  RCLCPP_INFO(this->get_logger(), "[%s]:   height: %d", get_name(), rgbCameraInfo.height);
-  RCLCPP_INFO(
-    this->get_logger(), "[%s]:   distortion_model: %s",
-    get_name(), rgbCameraInfo.distortion_model.c_str());
-  RCLCPP_INFO(
-    this->get_logger(), "[%s]:   D: [%f, %f, %f, %f, %f]",
-    get_name(), rgbCameraInfo.d[0], rgbCameraInfo.d[1], rgbCameraInfo.d[2], rgbCameraInfo.d[3],
-    rgbCameraInfo.d[4]);
-  RCLCPP_INFO(
-    this->get_logger(), "[%s]:   K: [%f, %f, %f, %f, %f, %f, %f, %f, %f]",
-    get_name(), rgbCameraInfo.k[0], rgbCameraInfo.k[1], rgbCameraInfo.k[2], rgbCameraInfo.k[3],
-    rgbCameraInfo.k[4], rgbCameraInfo.k[5], rgbCameraInfo.k[6], rgbCameraInfo.k[7],
-    rgbCameraInfo.k[8]);
-  RCLCPP_INFO(
-    this->get_logger(), "[%s]:   R: [%f, %f, %f, %f, %f, %f, %f, %f, %f]",
-    get_name(), rgbCameraInfo.r[0], rgbCameraInfo.r[1], rgbCameraInfo.r[2], rgbCameraInfo.r[3],
-    rgbCameraInfo.r[4], rgbCameraInfo.r[5], rgbCameraInfo.r[6], rgbCameraInfo.r[7],
-    rgbCameraInfo.r[8]);
-  RCLCPP_INFO(
-    this->get_logger(), "[%s]:   P: [%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]",
-    get_name(), rgbCameraInfo.p[0], rgbCameraInfo.p[1], rgbCameraInfo.p[2], rgbCameraInfo.p[3],
-    rgbCameraInfo.p[4], rgbCameraInfo.p[5], rgbCameraInfo.p[6], rgbCameraInfo.p[7],
-    rgbCameraInfo.p[8], rgbCameraInfo.p[9], rgbCameraInfo.p[10], rgbCameraInfo.p[11]);
-
+  RCLCPP_WARN(this->get_logger(), "[%s]: Printing USB speed...", get_name());
   RCLCPP_INFO(
     this->get_logger(), "[%s]: DepthAI Camera USB Speed: %s", get_name(),
     usbSpeedEnumMap.at(_device->getUsbSpeed()).c_str());

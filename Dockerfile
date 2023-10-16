@@ -68,6 +68,5 @@ COPY entrypoint.sh /entrypoint.sh
 
 COPY --from=builder $INSTALL_DIR $INSTALL_DIR
 
+COPY --from=builder $WORKSPACE_DIR/build $WORKSPACE_DIR/build
 COPY --from=builder $WORKSPACE_DIR/src $WORKSPACE_DIR/src
-RUN ls -la $WORKSPACE_DIR/src
-RUN ls -la $WORKSPACE_DIR
