@@ -41,6 +41,7 @@ class ImageConverter
 public:
   // ImageConverter() = default;
   ImageConverter(const std::string frameName, bool interleaved);
+  ~ImageConverter();
   ImageConverter(bool interleaved);
   void toRosMsgFromBitStream(
     std::shared_ptr<dai::ImgFrame> inData,

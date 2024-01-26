@@ -22,7 +22,7 @@ class ImuConverter
 {
 public:
   ImuConverter(const std::string & frameName);
-
+  ~ImuConverter();
   void toRosMsg(std::shared_ptr<dai::IMUData> inData, ImuMsgs::Imu & outImuMsg);
   ImuPtr toRosMsgPtr(const std::shared_ptr<dai::IMUData> inData);
 

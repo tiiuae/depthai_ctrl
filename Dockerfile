@@ -41,6 +41,7 @@ RUN apt update \
         yaml-cpp-vendor \
         cv-bridge \
         vision-msgs \
+        backward-ros \
         camera-info-manager \
         camera-calibration-parsers \
         xacro \
@@ -60,6 +61,7 @@ COPY --from=builder /tmp/yolo-v4-tiny-tf_openvino_2021.4_6shave.blob /depthai_co
 
 VOLUME /depthai_configs
 ENV DEPTHAI_PARAM_FILE /depthai_configs/parameters.yaml
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 ENTRYPOINT [ "/entrypoint.sh" ]
 

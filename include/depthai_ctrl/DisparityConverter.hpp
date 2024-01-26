@@ -29,6 +29,7 @@ public:
     const std::string frameName, float focalLength, float baseline = 7.5,
     float minDepth = 80, float maxDepth = 1100);
 
+  ~DisparityConverter();
   void toRosMsg(
     std::shared_ptr<dai::ImgFrame> inData,
     std::deque<DisparityMsgs::DisparityImage> & outImageMsg);

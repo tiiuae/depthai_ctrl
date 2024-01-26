@@ -14,6 +14,7 @@ ImgDetectionConverter::ImgDetectionConverter(
 {
   _rosBaseTime = rclcpp::Clock().now();
 }
+ImgDetectionConverter::~ImgDetectionConverter() = default;
 
 void ImgDetectionConverter::toRosMsg(
   std::shared_ptr<dai::ImgDetections> inNetData,

@@ -16,6 +16,7 @@
 *******************************************************************************/
 
 /* Authors(Unikie Oy): Mehmet Killioglu, Manuel Segarra-Abad, Sergey */
+#include <memory>
 
 #include "depthai_ctrl/depthai_camera.hpp"
 #include <rclcpp/rclcpp.hpp>
@@ -27,7 +28,6 @@ int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
 
-  std::cout << "DepthAI Camera Node." << std::endl;
   rclcpp::executors::MultiThreadedExecutor exec;
   rclcpp::NodeOptions options;
   auto cameraNode = std::make_shared<DepthAICamera>();
