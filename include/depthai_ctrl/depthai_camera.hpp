@@ -123,6 +123,7 @@ public:
 
   void Cleanup()
   {
+    _steady_clock.reset();
     _pipeline.reset();
     _device.reset();
     _depth_disparity_converter.reset();
@@ -157,7 +158,7 @@ public:
     // TODO, maybe remove callbacks?
     if (_thread_running && bool(_device)) {
       _firstFrameReceived = false;
-      _lastFrameTime = rclcpp::Clock(RCL_STEADY_TIME).now();
+      _lastFrameTime = _steady_clock->now();
       _thread_running = false;
       _pipeline.reset();
       _device.reset();
@@ -222,7 +223,7 @@ private:
 
   std::mutex _callback_mutex;
   rclcpp::Time _lastFrameTime;
-  rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
+  rclcpp::Clock::SharedPtr _steady_clock;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _left_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _right_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _color_publisher;

@@ -43,6 +43,7 @@ void DepthAICamera::Initialize()
   declare_parameter<std::string>("detection_roi_topic", "detections");*/
   declare_parameter<std::string>("nn_directory", "tiny-yolo-v4_openvino_2021.2_6shave.blob");
   declare_parameter<std::string>("camera_name", "oak");
+  _steady_clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
 
   /*const std::string left_camera_topic = get_parameter("left_camera_topic").as_string();
   const std::string right_camera_topic = get_parameter("right_camera_topic").as_string();
@@ -165,7 +166,7 @@ void DepthAICamera::Initialize()
   // cause dropped messages and unstable latencies between frames. When using USB3, we can
   // support multiple streams without any bandwidth issues.
   _useUSB3 = get_parameter("use_usb_three").as_bool();
-  _lastFrameTime = rclcpp::Clock(RCL_STEADY_TIME).now();
+  _lastFrameTime = _steady_clock->now();
   _rgb_camera_info = std::make_unique<CameraInfoMsg>();
 
   _change_paramaters_srv = create_service<rcl_interfaces::srv::SetParameters>(
@@ -196,7 +197,7 @@ void DepthAICamera::HandleStreamStatus()
   {
     std::lock_guard<std::mutex> lock(_callback_mutex);
     device_running = _thread_running && _firstFrameReceived &&
-      (_lastFrameTime.seconds() + 3.0) > rclcpp::Clock(RCL_STEADY_TIME).now().seconds();
+      (_lastFrameTime.seconds() + 3.0) > _steady_clock->now().seconds();
   }
   if (!device_running) {
     RCLCPP_WARN(
@@ -832,7 +833,7 @@ void DepthAICamera::onVideoEncoderCallback(
     }
     {
       std::lock_guard<std::mutex> lock(_callback_mutex);
-      _lastFrameTime = steady_clock_.now();
+      _lastFrameTime = _steady_clock->now();
     }
   }
 }
