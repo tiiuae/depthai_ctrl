@@ -8,7 +8,7 @@ namespace ros
 
 ImuConverter::ImuConverter(const std::string & frameName)
 : _frameName(frameName), _sequenceNum(0) {}
-
+ImuConverter::~ImuConverter() = default;
 void ImuConverter::toRosMsg(std::shared_ptr<dai::IMUData> inData, ImuMsgs::Imu & outImuMsg)
 {
 // setting the header

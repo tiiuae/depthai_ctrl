@@ -35,6 +35,10 @@ if [ "${USE_NEURAL_NETWORK}" = "1" ]; then
     ROS_FLAGS="${ROS_FLAGS} use_neural_network:=true"
 fi
 
+if [ "${EXIT_IF_CAMERA_START_FAILS}" = "1" ]; then
+    ROS_FLAGS="${ROS_FLAGS} exit_if_camera_start_fails:=true"
+fi
+
 if [ "${USE_USB_THREE}" = "1" ]; then
     ROS_FLAGS="${ROS_FLAGS} use_usb_three:=true"
 else

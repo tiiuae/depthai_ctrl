@@ -40,6 +40,9 @@ ImageConverter::ImageConverter(const std::string frameName, bool interleaved)
 {
   _rosBaseTime = rclcpp::Clock().now();
 }
+
+ImageConverter::~ImageConverter() = default;
+
 void ImageConverter::toRosMsgFromBitStream(
   std::shared_ptr<dai::ImgFrame> inData,
   std::deque<ImageMsgs::Image> & outImageMsgs,

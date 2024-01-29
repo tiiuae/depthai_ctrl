@@ -29,7 +29,8 @@ if(DEFINED ENV{BUILD_GSTREAMER})
 endif()
 
 project(depthai_ctrl LANGUAGES CXX C)
-
+find_package(backward_ros REQUIRED)
+# add_compile_options(-g)
 # # pkg-config configurations path.
 # if(NOT DEFINED ENV{PKG_CONFIG_PATH})
 #   set(ENV{PKG_CONFIG_PATH} "/usr/lib/x86_64-linux-gnu/pkgconfig/")

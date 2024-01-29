@@ -21,7 +21,7 @@ class ImgDetectionConverter
 public:
   // DetectionConverter() = default;
   ImgDetectionConverter(std::string frameName, int width, int height, bool normalized = false);
-
+  ~ImgDetectionConverter();
   void toRosMsg(
     std::shared_ptr<dai::ImgDetections> inNetData,
     std::deque<VisionMsgs::Detection2DArray> & opDetectionMsgs);

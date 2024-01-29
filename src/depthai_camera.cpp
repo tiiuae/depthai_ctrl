@@ -43,6 +43,7 @@ void DepthAICamera::Initialize()
   declare_parameter<std::string>("detection_roi_topic", "detections");*/
   declare_parameter<std::string>("nn_directory", "tiny-yolo-v4_openvino_2021.2_6shave.blob");
   declare_parameter<std::string>("camera_name", "oak");
+  _steady_clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
 
   /*const std::string left_camera_topic = get_parameter("left_camera_topic").as_string();
   const std::string right_camera_topic = get_parameter("right_camera_topic").as_string();
@@ -75,6 +76,10 @@ void DepthAICamera::Initialize()
     std::chrono::duration<double>(10.0),
     std::bind(&DepthAICamera::AutoFocusTimer, this));
 
+  _handle_camera_status_timer = this->create_wall_timer(
+    std::chrono::milliseconds(10000),
+    std::bind(&DepthAICamera::HandleStreamStatus, this), _callback_group_timer); // 10 sec
+
   // Video Stream parameters
   declare_parameter<std::string>("encoding", "H264");
   declare_parameter<int>("width", 1280);
@@ -90,6 +95,7 @@ void DepthAICamera::Initialize()
   declare_parameter<bool>("use_usb_three", false);
   declare_parameter<bool>("use_neural_network", false);
   declare_parameter<bool>("use_passthrough_preview", false);
+  declare_parameter<bool>("exit_if_camera_start_fails", false);
 
   _videoWidth = get_parameter("width").as_int();
   _videoHeight = get_parameter("height").as_int();
@@ -108,6 +114,7 @@ void DepthAICamera::Initialize()
   _left_camera_frame = _cameraName + "_left_camera_optical_frame";
   _right_camera_frame = _cameraName + "_right_camera_optical_frame";
   _color_camera_frame = _cameraName + "_rgb_camera_optical_frame";
+  _exit_if_camera_start_fails = get_parameter("exit_if_camera_start_fails").as_bool();
 
   RCLCPP_INFO(get_logger(), "[%s]: Initialization complete.", get_name());
   RCLCPP_INFO(get_logger(), "[%s]: Video stream parameters:", get_name());
@@ -159,7 +166,7 @@ void DepthAICamera::Initialize()
   // cause dropped messages and unstable latencies between frames. When using USB3, we can
   // support multiple streams without any bandwidth issues.
   _useUSB3 = get_parameter("use_usb_three").as_bool();
-  _lastFrameTime = rclcpp::Time(0);
+  _lastFrameTime = _steady_clock->now();
   _rgb_camera_info = std::make_unique<CameraInfoMsg>();
 
   _change_paramaters_srv = create_service<rcl_interfaces::srv::SetParameters>(
@@ -183,6 +190,48 @@ void DepthAICamera::AutoFocusTimer()
     _auto_focus_timer->cancel();
   }
 }
+
+void DepthAICamera::HandleStreamStatus()
+{
+  bool device_running = false;
+  {
+    std::lock_guard<std::mutex> lock(_callback_mutex);
+    device_running = _thread_running && _firstFrameReceived &&
+      (_lastFrameTime.seconds() + 3.0) > _steady_clock->now().seconds();
+  }
+  if (!device_running) {
+    RCLCPP_WARN(
+      get_logger(), "[%s]: Video stream is not running, restarting...",
+      get_name());
+    if (_auto_focus_timer) {
+      _auto_focus_timer->cancel();
+      _auto_focus_timer.reset();
+    }
+
+    // This also cancels the timer for this callback, so no new callbacks until this one finishes.
+    Stop();
+    if (TryRestarting()) {
+      RCLCPP_INFO(
+        get_logger(), "[%s]: Video stream restarted successfully",
+        get_name());
+      _auto_focus_timer =
+        this->create_wall_timer(
+        std::chrono::duration<double>(10.0),
+        std::bind(&DepthAICamera::AutoFocusTimer, this));
+    } else {
+      RCLCPP_ERROR(
+        get_logger(), "[%s]: Video stream restart failed",
+        get_name());
+    }
+    if (rclcpp::ok()) {
+      _handle_camera_status_timer = this->create_wall_timer(
+        std::chrono::milliseconds(10000),
+        std::bind(&DepthAICamera::HandleStreamStatus, this), _callback_group_timer); // 10 sec
+    }
+
+  }
+}
+
 
 void DepthAICamera::changeParametersCallback(
   const std::shared_ptr<rcl_interfaces::srv::SetParameters::Request> request,
@@ -316,12 +365,18 @@ void DepthAICamera::changeParametersCallback(
     } else {
       RCLCPP_INFO(this->get_logger(), "Starting video stream");
     }
-    _auto_focus_timer->reset();
+    _auto_focus_timer.reset();
     _auto_focus_timer =
       this->create_wall_timer(
       std::chrono::duration<double>(10.0),
       std::bind(&DepthAICamera::AutoFocusTimer, this));
     TryRestarting();
+
+    if (rclcpp::ok()) {
+      _handle_camera_status_timer = this->create_wall_timer(
+        std::chrono::milliseconds(10000),
+        std::bind(&DepthAICamera::HandleStreamStatus, this), _callback_group_timer); // 10 sec
+    }
   }
 }
 
@@ -340,12 +395,12 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
       command.begin(), command.end(), command.begin(),
       [](unsigned char c) {return std::tolower(c);});
     if (command == "start" && !_thread_running) {
-        _auto_focus_timer->reset();
-        _auto_focus_timer =
-          this->create_wall_timer(
-          std::chrono::duration<double>(10.0),
-          std::bind(&DepthAICamera::AutoFocusTimer, this));
-        TryRestarting();
+      _auto_focus_timer->reset();
+      _auto_focus_timer =
+        this->create_wall_timer(
+        std::chrono::duration<double>(10.0),
+        std::bind(&DepthAICamera::AutoFocusTimer, this));
+      TryRestarting();
     }
     if (command == "stop") {
       if (!_thread_running) {
@@ -359,7 +414,7 @@ void DepthAICamera::VideoStreamCommand(std_msgs::msg::String::SharedPtr msg)
   }
 }
 
-void DepthAICamera::TryRestarting()
+bool DepthAICamera::TryRestarting()
 {
   if (_thread_running) {
     _thread_running = false;
@@ -483,16 +538,18 @@ void DepthAICamera::TryRestarting()
 
   xinColor->out.link(colorCamera->inputControl);
   RCLCPP_INFO(this->get_logger(), "[%s]: Initializing DepthAI camera...", get_name());
-  for (int i = 0; i < 5 && !_device; i++) {
+  rclcpp::Rate r(1.0);
+  for (int i = 0; i < 20 && rclcpp::ok() && !_device; i++) {
     try {
       _device = std::make_shared<dai::Device>(*_pipeline, !_useUSB3);
     } catch (const std::runtime_error & err) {
       RCLCPP_ERROR(get_logger(), "Cannot start DepthAI camera: %s", err.what());
       _device.reset();
     }
+    r.sleep();
   }
   if (!_device) {
-    return;
+    return false;
   }
 
   _calibrationHandler = _device->readCalibration();
@@ -614,7 +671,7 @@ void DepthAICamera::TryRestarting()
     std::bind(
       &DepthAICamera::onVideoEncoderCallback, this,
       std::placeholders::_1));
-
+  return true;
 }
 
 void DepthAICamera::changeLensPosition(int lens_position)
@@ -625,7 +682,7 @@ void DepthAICamera::changeLensPosition(int lens_position)
   dai::CameraControl colorCamCtrl;
   colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::OFF);
   colorCamCtrl.setManualFocus(lens_position);
-  _colorCamInputQueue->send(colorCamCtrl);
+  _colorCamInputQueue->send(colorCamCtrl, std::chrono::milliseconds(2000));
 }
 
 void DepthAICamera::changeFocusMode(bool use_auto_focus)
@@ -640,7 +697,7 @@ void DepthAICamera::changeFocusMode(bool use_auto_focus)
     colorCamCtrl.setAutoFocusMode(dai::RawCameraControl::AutoFocusMode::OFF);
     colorCamCtrl.setManualFocus(_videoLensPosition);
   }
-  _colorCamInputQueue->send(colorCamCtrl);
+  _colorCamInputQueue->send(colorCamCtrl, std::chrono::milliseconds(2000));
 }
 
 void DepthAICamera::onLeftCamCallback(
@@ -773,6 +830,10 @@ void DepthAICamera::onVideoEncoderCallback(
       RCLCPP_INFO(
         this->get_logger(), "[%s]: First frame received!",
         get_name());
+    }
+    {
+      std::lock_guard<std::mutex> lock(_callback_mutex);
+      _lastFrameTime = _steady_clock->now();
     }
   }
 }

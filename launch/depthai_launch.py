@@ -23,6 +23,7 @@ def generate_launch_description():
 
     xacro_path = os.path.join(pkg_path, 'urdf', 'depthai_descr.urdf.xacro')
 
+    exit_if_camera_start_fails = LaunchConfiguration('exit_if_camera_start_fails', default = 'false')
     camera_model = LaunchConfiguration('camera_model',  default = 'OAK-D')
     camera_name  = LaunchConfiguration('camera_name',   default = 'oak')
     base_frame   = LaunchConfiguration('base_frame',    default = 'oak-d_frame')
@@ -43,6 +44,11 @@ def generate_launch_description():
     use_passthrough_preview = LaunchConfiguration('use_passthrough_preview')
     use_state_publisher = LaunchConfiguration('use_state_publisher')
     remappings = []
+
+    declare_exit_if_camera_start_fails_cmd = DeclareLaunchArgument(
+        'exit_if_camera_start_fails',
+        default_value=exit_if_camera_start_fails,
+        description='Whether to exit if the camera fails to start.')
 
     declare_camera_model_cmd = DeclareLaunchArgument(
         'camera_model',
@@ -158,6 +164,7 @@ def generate_launch_description():
                             'use_usb_three': use_usb_three,
                             'use_neural_network': use_neural_network,
                             'use_passthrough_preview': use_passthrough_preview,
+                            'exit_if_camera_start_fails': exit_if_camera_start_fails
                         }],
     )
 
@@ -184,6 +191,7 @@ def generate_launch_description():
         )
 
     ld = LaunchDescription()
+    ld.add_action(declare_exit_if_camera_start_fails_cmd)
     ld.add_action(declare_camera_name_cmd)
     ld.add_action(declare_camera_model_cmd)
     ld.add_action(declare_base_frame_cmd)

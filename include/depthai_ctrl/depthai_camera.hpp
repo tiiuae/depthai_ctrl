@@ -21,6 +21,7 @@
 #define FOG_SW_DEPTHAI_CAMERA_H
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
+#include <mutex>
 #include <depthai/device/Device.hpp>
 #include <depthai/depthai.hpp>
 #include <depthai/pipeline/datatype/ImgFrame.hpp>
@@ -66,8 +67,15 @@ public:
   using CameraInfoMsg = sensor_msgs::msg::CameraInfo;
   using CompressedImageMsg = sensor_msgs::msg::CompressedImage;
   using Ptr = std::shared_ptr<depthai_ctrl::DepthAICamera>;
+
+  DepthAICamera([[maybe_unused]] const rclcpp::NodeOptions & options)
+  : DepthAICamera("camera_node") {}
+
   DepthAICamera()
-  : Node("camera_node"),
+  : DepthAICamera("camera_node") {}
+
+  DepthAICamera(const std::string & name)
+  : Node(name),
     _videoWidth(1280),
     _videoHeight(720),
     _videoFps(25.),
@@ -83,6 +91,7 @@ public:
     _firstFrameReceived(false),
     _useNeuralNetwork(false),
     _syncNN(true),
+    _exit_if_camera_start_fails(false),
     _thread_running(false),
     _left_camera_frame("left_camera_frame"),
     _right_camera_frame("right_camera_frame"),
@@ -97,65 +106,77 @@ public:
     _passthroughCallback(0)
   {
     Initialize();
-    TryRestarting();
+    if (!TryRestarting()) {
+      RCLCPP_ERROR(get_logger(), "Failed to start camera");
+      if (_exit_if_camera_start_fails) {
+        rclcpp::shutdown();
+      }
+    }
   }
 
-  DepthAICamera(const rclcpp::NodeOptions & options)
-  : Node("camera_node", options),
-    _videoWidth(1280),
-    _videoHeight(720),
-    _videoFps(25.),
-    _videoBitrate(3000000),
-    _videoLensPosition(110),
-    _videoH265(false),
-    _useMonoCams(false),
-    _useRawColorCam(false),
-    _useDepth(false),
-    _useVideoFromColorCam(true),
-    _useAutoFocus(false),
-    _useUSB3(false),
-    _firstFrameReceived(false),
-    _useNeuralNetwork(false),
-    _syncNN(true),
-    _thread_running(false),
-    _left_camera_frame("left_camera_frame"),
-    _right_camera_frame("right_camera_frame"),
-    _color_camera_frame("color_camera_frame"),
-    _nn_directory("tiny-yolo-v4_openvino_2021.2_6shave.blob"),
-    _cameraName("oak"),
-    _leftCamCallback(0),
-    _rightCamCallback(0),
-    _colorCamCallback(0),
-    _depthCallback(0),
-    _videoEncoderCallback(0),
-    _passthroughCallback(0)
-  {
-
-    Initialize();
-    TryRestarting();
-  }
 
   ~DepthAICamera()
   {
     Stop();
+    Cleanup();
+  }
+
+  void Cleanup()
+  {
+    _steady_clock.reset();
+    _pipeline.reset();
+    _device.reset();
+    _depth_disparity_converter.reset();
+    _color_camera_converter.reset();
+    _left_camera_converter.reset();
+    _right_camera_converter.reset();
+    _passthrough_converter.reset();
+    _neural_network_converter.reset();
+    _videoQueue.reset();
+    _leftQueue.reset();
+    _rightQueue.reset();
+    _colorQueue.reset();
+    _depthQueue.reset();
+    _passthroughQueue.reset();
+    _colorCamInputQueue.reset();
+    _neuralNetworkOutputQueue.reset();
+    if (_auto_focus_timer) {
+      _auto_focus_timer->cancel();
+      _auto_focus_timer.reset();
+    }
+    if (_handle_camera_status_timer) {
+      _handle_camera_status_timer->cancel();
+      _handle_camera_status_timer.reset();
+    }
   }
 
   bool IsNodeRunning() {return bool(_device) && !_device->isClosed() && _thread_running;}
 
   void Stop()
   {
+    RCLCPP_INFO(get_logger(), "Stopping DepthAI Camera");
     // TODO, maybe remove callbacks?
     if (_thread_running && bool(_device)) {
+      _firstFrameReceived = false;
+      _lastFrameTime = _steady_clock->now();
       _thread_running = false;
+      _pipeline.reset();
       _device.reset();
+      if (_handle_camera_status_timer) {
+        _handle_camera_status_timer->cancel();
+        _handle_camera_status_timer.reset();
+      }
     }
+    RCLCPP_INFO(get_logger(), "Stopped DepthAI Camera");
   }
 
-  void TryRestarting();
+  bool TryRestarting();
 
 private:
   void ProcessingThread();
+  void HandleStreamStatus();
   void AutoFocusTimer();
+  void stopHandleStreamTimer();
   void changeLensPosition(int lens_position);
   void changeFocusMode(bool use_auto_focus);
   void onLeftCamCallback(const std::shared_ptr<dai::ADatatype> data);
@@ -195,11 +216,14 @@ private:
   bool _useVideoFromColorCam;
   bool _useAutoFocus;
   bool _useUSB3;
-  bool _firstFrameReceived;
+  std::atomic<bool> _firstFrameReceived;
   bool _useNeuralNetwork;
   bool _syncNN;
-  rclcpp::Time _lastFrameTime;
+  bool _exit_if_camera_start_fails;
 
+  std::mutex _callback_mutex;
+  rclcpp::Time _lastFrameTime;
+  rclcpp::Clock::SharedPtr _steady_clock;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _left_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _right_publisher;
   std::shared_ptr<rclcpp::Publisher<ImageMsg>> _color_publisher;
@@ -213,6 +237,10 @@ private:
 
   rclcpp::TimerBase::SharedPtr _auto_focus_timer;
   std::shared_ptr<rclcpp::Publisher<vision_msgs::msg::Detection2DArray>> _detection_roi_publisher;
+
+  rclcpp::TimerBase::SharedPtr _handle_camera_status_timer;
+
+  rclcpp::CallbackGroup::SharedPtr _callback_group_timer;
 
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr _stream_command_subscriber;
 
