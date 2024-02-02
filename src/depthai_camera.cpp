@@ -791,49 +791,53 @@ void DepthAICamera::onVideoEncoderCallback(
     this->get_logger(), "[%s]: Received %ld video frames...",
     get_name(), videoPtrVector.size());
   for (std::shared_ptr<dai::ImgFrame> & videoPtr : videoPtrVector) {
+    try {
+      /*
+        Old implementation uses getTimestamp, which had a bug where the time is not correct when run at boot.
+        getTimestamp is host syncronized and supposed to give the time in host clock.
+        However, since the DepthAI camera is starting its boot at the same time as the host,
+        The syncronization is not working properly as it tries to syncronize the camera clock with the host.
+        Therefore, we use the getTimestampDevice() to get direct device time.
+        This implementation will work without any problems for the H264 video streaming.
+        However, a host syncronized time is needed for the raw color camera, when doing camera based navigation.
+        Otherwise, the time drifts will cause wrong estimations and tracking will be unstable.
 
-    /*
-      Old implementation uses getTimestamp, which had a bug where the time is not correct when run at boot.
-      getTimestamp is host syncronized and supposed to give the time in host clock.
-      However, since the DepthAI camera is starting its boot at the same time as the host,
-      The syncronization is not working properly as it tries to syncronize the camera clock with the host.
-      Therefore, we use the getTimestampDevice() to get direct device time.
-      This implementation will work without any problems for the H264 video streaming.
-      However, a host syncronized time is needed for the raw color camera, when doing camera based navigation.
-      Otherwise, the time drifts will cause wrong estimations and tracking will be unstable.
+        It is also possible to use SequenceNumber for timestamp calculation, and it also works for H264 streaming.
+        However, it might still be problematic with the raw color camera. It will be investigated later.
+      */
+      //const auto stamp = videoPtr->getTimestamp().time_since_epoch().count();
+      const auto stamp = videoPtr->getTimestampDevice().time_since_epoch().count();
+      //const auto seq = videoPtr->getSequenceNum();
+      //int64_t stamp = (int64_t)seq * (1e9/_videoFps); // Use sequence number for timestamp
 
-      It is also possible to use SequenceNumber for timestamp calculation, and it also works for H264 streaming.
-      However, it might still be problematic with the raw color camera. It will be investigated later.
-    */
-    //const auto stamp = videoPtr->getTimestamp().time_since_epoch().count();
-    const auto stamp = videoPtr->getTimestampDevice().time_since_epoch().count();
-    //const auto seq = videoPtr->getSequenceNum();
-    //int64_t stamp = (int64_t)seq * (1e9/_videoFps); // Use sequence number for timestamp
+      CompressedImageMsg video_stream_chunk{};
+      video_stream_chunk.header.frame_id = _color_camera_frame;
 
-    CompressedImageMsg video_stream_chunk{};
-    video_stream_chunk.header.frame_id = _color_camera_frame;
+      // rclcpp::Time can be initialized directly with nanoseconds only.
+      // Internally, when given with seconds and nanoseconds, it casts it to nanoseconds anyways.
+      video_stream_chunk.header.stamp = rclcpp::Time(stamp, RCL_STEADY_TIME);
+      video_stream_chunk.data.swap(videoPtr->getData());
+      video_stream_chunk.format = _videoH265 ? "H265" : "H264";
+      _video_publisher->publish(video_stream_chunk);
 
-    // rclcpp::Time can be initialized directly with nanoseconds only.
-    // Internally, when given with seconds and nanoseconds, it casts it to nanoseconds anyways.
-    video_stream_chunk.header.stamp = rclcpp::Time(stamp, RCL_STEADY_TIME);
-    video_stream_chunk.data.swap(videoPtr->getData());
-    video_stream_chunk.format = _videoH265 ? "H265" : "H264";
-    _video_publisher->publish(video_stream_chunk);
-
-    if (!_useRawColorCam && _camera_info_publisher->get_subscription_count() > 0) {
-      _rgb_camera_info->header.stamp = video_stream_chunk.header.stamp;
-      _rgb_camera_info->header.frame_id = video_stream_chunk.header.frame_id;
-      _camera_info_publisher->publish(*_rgb_camera_info);
-    }
-    if (!_firstFrameReceived) {
-      _firstFrameReceived = true;
-      RCLCPP_INFO(
-        this->get_logger(), "[%s]: First frame received!",
-        get_name());
-    }
-    {
-      std::lock_guard<std::mutex> lock(_callback_mutex);
-      _lastFrameTime = _steady_clock->now();
+      if (!_useRawColorCam && _camera_info_publisher->get_subscription_count() > 0) {
+        _rgb_camera_info->header.stamp = video_stream_chunk.header.stamp;
+        _rgb_camera_info->header.frame_id = video_stream_chunk.header.frame_id;
+        _camera_info_publisher->publish(*_rgb_camera_info);
+      }
+      if (!_firstFrameReceived) {
+        _firstFrameReceived = true;
+        RCLCPP_INFO(
+          this->get_logger(), "[%s]: First frame received!",
+          get_name());
+      }
+      {
+        std::lock_guard<std::mutex> lock(_callback_mutex);
+        _lastFrameTime = _steady_clock->now();
+      }
+    } catch (...) {
+      RCLCPP_ERROR(this->get_logger(), "Error while parsing video msg");
+      return;
     }
   }
 }
