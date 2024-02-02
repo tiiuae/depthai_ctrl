@@ -41,6 +41,8 @@ jobs:
 
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/$default_branch" ]]; then
             matrix_list=("amd64" "arm64" "riscv64")
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/dbg_extend_stream_handling_durations" ]]; then
+            matrix_list=("riscv64") # TODO(mehmetkillioglu): DEBUG ONLY, MAKE SURE TO REMOVE LATER
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "$default_branch" ]]; then
             matrix_list=("amd64" "arm64" "riscv64")
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then

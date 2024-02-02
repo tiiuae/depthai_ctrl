@@ -77,7 +77,7 @@ void DepthAICamera::Initialize()
     std::bind(&DepthAICamera::AutoFocusTimer, this));
 
   _handle_camera_status_timer = this->create_wall_timer(
-    std::chrono::milliseconds(10000),
+    std::chrono::milliseconds(45000),
     std::bind(&DepthAICamera::HandleStreamStatus, this), _callback_group_timer); // 10 sec
 
   // Video Stream parameters
@@ -197,7 +197,7 @@ void DepthAICamera::HandleStreamStatus()
   {
     std::lock_guard<std::mutex> lock(_callback_mutex);
     device_running = _thread_running && _firstFrameReceived &&
-      (_lastFrameTime.seconds() + 3.0) > _steady_clock->now().seconds();
+      (_lastFrameTime.seconds() + 30.0) > _steady_clock->now().seconds();
   }
   if (!device_running) {
     RCLCPP_WARN(
@@ -225,7 +225,7 @@ void DepthAICamera::HandleStreamStatus()
     }
     if (rclcpp::ok()) {
       _handle_camera_status_timer = this->create_wall_timer(
-        std::chrono::milliseconds(10000),
+        std::chrono::milliseconds(45000),
         std::bind(&DepthAICamera::HandleStreamStatus, this), _callback_group_timer); // 10 sec
     }
 
@@ -374,7 +374,7 @@ void DepthAICamera::changeParametersCallback(
 
     if (rclcpp::ok()) {
       _handle_camera_status_timer = this->create_wall_timer(
-        std::chrono::milliseconds(10000),
+        std::chrono::milliseconds(45000),
         std::bind(&DepthAICamera::HandleStreamStatus, this), _callback_group_timer); // 10 sec
     }
   }
