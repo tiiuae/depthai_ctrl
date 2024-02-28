@@ -31,7 +31,7 @@ RUN /packaging/build_colcon_sdk.sh ${TARGETARCH:-amd64}
 #  ▲               runtime ──┐
 #  └── build                 ▼
 
-FROM ghcr.io/tiiuae/fog-ros-baseimage:v3.1.0
+FROM ghcr.io/tiiuae/fog-ros-baseimage:v3.2.0
 
 RUN apt update \
     && apt install -y --no-install-recommends \
