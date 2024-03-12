@@ -57,7 +57,7 @@ fi
 # The reason is that depthai camera switches to onboard processor when initialized, and causing USB device name changed.
 # Old version with ubuntu base worked OK for hotplug, but this one does not.
 # This could cause problem on the host machine, causing some USB devices to disconnect and require a unplug-replug.
-/etc/init.d/udev start
+/sbin/udevd -d
 mode="${1}"
 if [ "${mode}" = "gstreamer" ]; then
     ros-with-env ros2 run depthai_ctrl gstreamer_node \
