@@ -47,8 +47,7 @@ if(NOT CMAKE_CXX_STANDARD)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic
-)
+  add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 set(opencv_version 4)
@@ -86,34 +85,62 @@ if(NOT OpenCV_FOUND)
   find_package(OpenCV 3 REQUIRED COMPONENTS imgproc highgui)
 endif()
 
-
 if (BUILD_GSTREAMER)
-pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
-include_directories(SYSTEM ${GST_INCLUDE_DIRS})
-link_directories(${GST_LIBRARY_DIRS})
+  pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
+  include_directories(SYSTEM ${GST_INCLUDE_DIRS})
+  link_directories(${GST_LIBRARY_DIRS})
 endif()
 
 include_directories(include)
 
 set(camera_dependencies
-rclcpp
-sensor_msgs
-stereo_msgs
-geometry_msgs
-std_msgs
-vision_msgs
-rclcpp_components
-camera_info_manager
-cv_bridge
-image_transport
+  rclcpp
+  sensor_msgs
+  stereo_msgs
+  geometry_msgs
+  std_msgs
+  vision_msgs
+  rclcpp_components
+  camera_info_manager
+  cv_bridge
+  image_transport
 )
 
 FILE(GLOB LIB_SRC
-"src/ImageConverter.cpp"
-"src/ImgDetectionConverter.cpp"
-"src/ImuConverter.cpp"
+  "src/ImageConverter.cpp"
+  "src/ImgDetectionConverter.cpp"
+  "src/ImuConverter.cpp"
 )
 
+option(FUZZING "Enable fuzzing mode" OFF)
+
+if(FUZZING)
+  # Enable fuzzing and sanitizers
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer,address,undefined -ggdb -O2")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=fuzzer,address,undefined -ggdb -O2")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=fuzzer,address,undefined -ggdb -O2")
+
+  # Add the depthai_bridge library
+  add_library(depthai_bridge SHARED ${LIB_SRC})
+  ament_target_dependencies(depthai_bridge PUBLIC ${camera_dependencies})
+  target_link_libraries(depthai_bridge PUBLIC depthai::core opencv_imgproc opencv_highgui)
+
+  # NOTE: This is copied from below as it enables correct compilation for
+  # the `ImgDetectionConverter.cpp`
+  target_compile_definitions(depthai_bridge PRIVATE IS_HUMBLE)
+
+  add_executable(img_conv_fuzz fuzz/img_conv_fuzz.cc)
+  target_link_libraries(img_conv_fuzz PRIVATE depthai_bridge)
+  add_executable(imu_conv_fuzz fuzz/imu_conv_fuzz.cc)
+  target_link_libraries(imu_conv_fuzz PRIVATE depthai_bridge)
+  add_executable(img_det_conv_fuzz fuzz/img_det_conv_fuzz.cc)
+  target_link_libraries(img_det_conv_fuzz PRIVATE depthai_bridge)
+
+  # Stop after building the fuzz target
+  return()
+endif()
+
+# Regular build process continues here
 add_library(depthai_bridge SHARED ${LIB_SRC})
 ament_target_dependencies(depthai_bridge PUBLIC ${camera_dependencies})
 target_link_libraries(depthai_bridge PUBLIC depthai-core opencv_imgproc opencv_highgui)
@@ -134,7 +161,6 @@ add_library(depthai_camera SHARED src/depthai_camera.cpp)
 ament_target_dependencies(depthai_camera PUBLIC ${camera_dependencies})
 target_link_libraries(depthai_camera PUBLIC depthai-core opencv_imgproc opencv_highgui depthai_bridge)
 
-
 # DepthAI Camera as separate node
 add_executable(camera_node src/camera_node.cpp)
 ament_target_dependencies(camera_node PUBLIC rclcpp rclcpp_components)
@@ -145,31 +171,30 @@ add_dependencies(camera_node depthai_camera)
 rclcpp_components_register_nodes(depthai_camera PLUGIN "${PROJECT_NAME}::DepthAICamera" EXECUTABLE depthai_camera)
 
 if (BUILD_GSTREAMER)
-# DepthAI GStreamer as Component library
-add_library(gstreamer_interface SHARED src/gstreamer_interface.cpp)
-ament_target_dependencies(gstreamer_interface PUBLIC rclcpp std_msgs sensor_msgs)
-target_link_libraries(gstreamer_interface PUBLIC ${GST_LIBRARIES} gstapp-1.0)
+  # DepthAI GStreamer as Component library
+  add_library(gstreamer_interface SHARED src/gstreamer_interface.cpp)
+  ament_target_dependencies(gstreamer_interface PUBLIC rclcpp std_msgs sensor_msgs)
+  target_link_libraries(gstreamer_interface PUBLIC ${GST_LIBRARIES} gstapp-1.0)
 
-# DepthAI GStreamer as Component library
-add_library(depthai_gstreamer SHARED src/depthai_gstreamer.cpp)
-ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs rclcpp_components)
-target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0 gstreamer_interface)
+  # DepthAI GStreamer as Component library
+  add_library(depthai_gstreamer SHARED src/depthai_gstreamer.cpp)
+  ament_target_dependencies(depthai_gstreamer PUBLIC rclcpp std_msgs sensor_msgs rclcpp_components)
+  target_link_libraries(depthai_gstreamer PUBLIC ${GST_LIBRARIES} gstapp-1.0 gstreamer_interface)
 
-# DepthAI GStreamer as separate node
-add_executable(gstreamer_node src/gstreamer_node.cpp)
-ament_target_dependencies(gstreamer_node PUBLIC rclcpp rclcpp_components)
-target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
-# Combined DepthAI node
-add_executable(depthai_ctrl src/depthai_ctrl.cpp)
-ament_target_dependencies(depthai_ctrl PUBLIC rclcpp rclcpp_components)
-target_link_libraries(depthai_ctrl PUBLIC depthai_camera depthai_gstreamer)
+  # DepthAI GStreamer as separate node
+  add_executable(gstreamer_node src/gstreamer_node.cpp)
+  ament_target_dependencies(gstreamer_node PUBLIC rclcpp rclcpp_components)
+  target_link_libraries(gstreamer_node PUBLIC depthai_gstreamer)
+  
+  # Combined DepthAI node
+  add_executable(depthai_ctrl src/depthai_ctrl.cpp)
+  ament_target_dependencies(depthai_ctrl PUBLIC rclcpp rclcpp_components)
+  target_link_libraries(depthai_ctrl PUBLIC depthai_camera depthai_gstreamer)
 
-add_dependencies(depthai_ctrl depthai_gstreamer depthai_camera)
-add_dependencies(gstreamer_node depthai_gstreamer)
-rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
+  add_dependencies(depthai_ctrl depthai_gstreamer depthai_camera)
+  add_dependencies(gstreamer_node depthai_gstreamer)
+  rclcpp_components_register_nodes(depthai_gstreamer PLUGIN "${PROJECT_NAME}::DepthAIGStreamer" EXECUTABLE depthai_gstreamer)
 endif()
-
-
 
 # Disable tests as its obsolete
 # if (BUILD_TESTING)
@@ -214,9 +239,7 @@ install(TARGETS
         camera_node
         DESTINATION lib/${PROJECT_NAME})
 
-
 install(DIRECTORY launch params urdf
-        DESTINATION share/${PROJECT_NAME}
-        )
+        DESTINATION share/${PROJECT_NAME})
 
 ament_package()
