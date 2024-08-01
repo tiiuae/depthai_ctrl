@@ -1,6 +1,6 @@
 # This is a legacy building format with ros:humble-base and ubuntu as the base.
 # Legacy format is not maintained anymore, see /Dockerfile for multiarch building with Yocto and OpenEmbedded.
-FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v2.1.0 AS builder
+FROM ghcr.io/tiiuae/fog-ros-baseimage-builder:v3.3.0 AS builder
 ARG BUILD_GSTREAMER
 # TODO: not sure how many of these deps are actually needed for building. at least this:
 # libusb-1.0-0-dev
