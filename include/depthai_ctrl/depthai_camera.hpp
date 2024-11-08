@@ -44,7 +44,7 @@
 #include <vision_msgs/msg/detection2_d_array.hpp>
 #include <opencv2/opencv.hpp>
 #include <iostream>
-#include <cv_bridge/cv_bridge.h>
+#include <cv_bridge/cv_bridge.hpp>
 
 
 #include <camera_info_manager/camera_info_manager.hpp>
