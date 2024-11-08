@@ -110,9 +110,13 @@ FILE(GLOB LIB_SRC
   "src/ImageConverter.cpp"
   "src/ImgDetectionConverter.cpp"
   "src/ImuConverter.cpp"
+  "src/DisparityConverter.cpp"
 )
 
 option(FUZZING "Enable fuzzing mode" OFF)
+
+
+#find_library(ICU_LIBRARIES NAMES icuuc icudata icui18n PATHS /usr/lib/x86_64-linux-gnu)
 
 if(FUZZING)
   # Enable fuzzing and sanitizers
@@ -135,6 +139,8 @@ if(FUZZING)
   target_link_libraries(imu_conv_fuzz PRIVATE depthai_bridge)
   add_executable(img_det_conv_fuzz fuzz/img_det_conv_fuzz.cc)
   target_link_libraries(img_det_conv_fuzz PRIVATE depthai_bridge)
+  add_executable(disp_conv_fuzz fuzz/disp_fuzz.cc)
+  target_link_libraries(disp_conv_fuzz PRIVATE depthai_bridge)
 
   # Stop after building the fuzz target
   return()

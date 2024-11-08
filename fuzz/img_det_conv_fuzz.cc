@@ -11,52 +11,77 @@
 #include <ratio>
 #include <tuple>
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
-  FuzzedDataProvider dataProvider(Data, Size);
+// clang-format off
+static const char* knownErrors[] = {
+  "Time difference would underflow",
+  "Time stamp calculation would overflow",
+  nullptr
+};
+// clang-format on
 
-  std::string frameName = dataProvider.ConsumeRandomLengthString();
-  int width = dataProvider.ConsumeIntegral<int>();
-  int height = dataProvider.ConsumeIntegral<int>();
-  bool normalized = dataProvider.ConsumeBool();
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
+{
+    FuzzedDataProvider dataProvider(Data, Size);
 
-  dai::ros::ImgDetectionConverter detectionConverter(frameName, width, height,
-                                                     normalized);
+    std::string frameName = dataProvider.ConsumeRandomLengthString();
+    int width = dataProvider.ConsumeIntegral<int>();
+    int height = dataProvider.ConsumeIntegral<int>();
+    bool normalized = dataProvider.ConsumeBool();
 
-  auto inNetData = std::make_shared<dai::ImgDetections>();
+    dai::ros::ImgDetectionConverter detectionConverter(frameName, width, height, normalized);
 
-  // Determine the number of detections to generate
-  size_t numDetections = dataProvider.ConsumeIntegralInRange<size_t>(0, 10);
+    auto inNetData = std::make_shared<dai::ImgDetections>();
 
-  // Generate random detections and add them to inNetData->detections
-  for (size_t i = 0; i < numDetections; ++i) {
-    dai::ImgDetection detection;
+    // Determine the number of detections to generate
+    size_t numDetections = dataProvider.ConsumeIntegralInRange<size_t>(0, 10);
 
-    detection.label = dataProvider.ConsumeIntegral<int>();
-    detection.confidence = dataProvider.ConsumeFloatingPoint<float>();
-    detection.xmin = dataProvider.ConsumeFloatingPoint<float>();
-    detection.ymin = dataProvider.ConsumeFloatingPoint<float>();
-    detection.xmax = dataProvider.ConsumeFloatingPoint<float>();
-    detection.ymax = dataProvider.ConsumeFloatingPoint<float>();
+    // Generate random detections and add them to inNetData->detections
+    for (size_t i = 0; i < numDetections; ++i)
+    {
+        dai::ImgDetection detection;
 
-    inNetData->detections.push_back(detection);
-  }
+        detection.label = dataProvider.ConsumeIntegral<int>();
+        detection.confidence = dataProvider.ConsumeFloatingPoint<float>();
+        detection.xmin = dataProvider.ConsumeFloatingPoint<float>();
+        detection.ymin = dataProvider.ConsumeFloatingPoint<float>();
+        detection.xmax = dataProvider.ConsumeFloatingPoint<float>();
+        detection.ymax = dataProvider.ConsumeFloatingPoint<float>();
 
-  auto timestamp =
-      std::chrono::steady_clock::time_point(std::chrono::steady_clock::duration(
-          dataProvider.ConsumeIntegral<int64_t>()));
-  inNetData->setTimestamp(timestamp);
+        inNetData->detections.push_back(detection);
+    }
 
-  auto timestampDevice =
-      std::chrono::steady_clock::time_point(std::chrono::steady_clock::duration(
-          dataProvider.ConsumeIntegral<int64_t>()));
-  inNetData->setTimestampDevice(timestampDevice);
+    auto timestamp = std::chrono::steady_clock::time_point(
+        std::chrono::steady_clock::duration(dataProvider.ConsumeIntegral<int64_t>()));
+    inNetData->setTimestamp(timestamp);
 
-  inNetData->setSequenceNum(dataProvider.ConsumeIntegral<int64_t>());
+    auto timestampDevice = std::chrono::steady_clock::time_point(
+        std::chrono::steady_clock::duration(dataProvider.ConsumeIntegral<int64_t>()));
+    inNetData->setTimestampDevice(timestampDevice);
 
-  std::deque<dai::ros::VisionMsgs::Detection2DArray> opDetectionMsgs;
+    inNetData->setSequenceNum(dataProvider.ConsumeIntegral<int64_t>());
 
-  detectionConverter.toRosMsg(inNetData, opDetectionMsgs);
-  auto rosMsgPtr = detectionConverter.toRosMsgPtr(inNetData);
+    std::deque<dai::ros::VisionMsgs::Detection2DArray> opDetectionMsgs;
 
-  return 0;
+    try
+    {
+        detectionConverter.toRosMsg(inNetData, opDetectionMsgs);
+        auto rosMsgPtr = detectionConverter.toRosMsgPtr(inNetData);
+    }
+    catch (const std::runtime_error &e)
+    {
+        // Handle runtime errors separately
+        const char *errorMsg = e.what();
+        for (const char **known = knownErrors; *known != nullptr; ++known)
+        {
+            if (strstr(errorMsg, *known) != nullptr)
+            {
+
+                return 0;
+            }
+        }
+
+        throw;
+    }
+
+    return 0;
 }
