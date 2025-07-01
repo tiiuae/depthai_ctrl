@@ -17,6 +17,7 @@ std::unordered_map<dai::RawImgFrame::Type,
   {dai::RawImgFrame::Type::RGB888i, "rgb8"},
   {dai::RawImgFrame::Type::BGR888i, "bgr8"},
   {dai::RawImgFrame::Type::GRAY8, "mono8"},
+  {dai::RawImgFrame::Type::NV12, "nv12"},
   {dai::RawImgFrame::Type::RAW8, "mono8"},
   {dai::RawImgFrame::Type::RAW16, "16UC1"},
   {dai::RawImgFrame::Type::YUV420p, "YUV420"}};
@@ -25,7 +26,7 @@ std::unordered_map<dai::RawImgFrame::Type,
 std::unordered_map<dai::RawImgFrame::Type, std::string> ImageConverter::planarEncodingEnumMap = {
   {dai::RawImgFrame::Type::BGR888p, "rgb8"},    // 3_1_bgr8 represents 3 planes/channels and 1 byte per pixel in BGR format
   {dai::RawImgFrame::Type::RGB888p, "rgb8"},
-  {dai::RawImgFrame::Type::NV12, "rgb8"},
+  // {dai::RawImgFrame::Type::NV12, "rgb8"},
   {dai::RawImgFrame::Type::YUV420p, "rgb8"}};
 
 ImageConverter::ImageConverter(bool interleaved)
