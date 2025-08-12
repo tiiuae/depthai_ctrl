@@ -466,7 +466,7 @@ bool DepthAICamera::TryRestarting()
   xoutVideo->setStreamName("enc26xColor");
   // Setup Color Camera
   colorCamera->setBoardSocket(dai::CameraBoardSocket::RGB);
-  colorCamera->setResolution(dai::ColorCameraProperties::SensorResolution::THE_1080_P);
+  colorCamera->setResolution(dai::ColorCameraProperties::SensorResolution::THE_4_K);
 
   // Preview resolution cannot be larger than Video's, thus resolution color camera image is limited
   if (_useNeuralNetwork) {
