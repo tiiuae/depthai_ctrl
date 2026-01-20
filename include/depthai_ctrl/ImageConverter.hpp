@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cv_bridge/cv_bridge.h>
+#include <cv_bridge/cv_bridge.hpp>
 
 #include <depthai-shared/common/CameraBoardSocket.hpp>
 #include <depthai-shared/common/Point2f.hpp>
